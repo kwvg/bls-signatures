@@ -127,6 +127,18 @@ if test x"$use_debug" = x"yes" -o x"$use_optimizations" = x"no"; then
     dnl -ftrapv and -fwrapv conflict, so we only set this if use_debug=no
     AX_CHECK_COMPILE_FLAG([-fwrapv],[DEBUG_FLAGS="$DEBUG_FLAGS -fwrapv"], [], [[$FLAG_WERROR]])
   fi
+else
+  dnl If not debugging, enable more aggressive optimizations
+  AX_CHECK_COMPILE_FLAG([-O3], [CORE_FLAGS="$CORE_FLAGS -O3"], [
+    AX_CHECK_COMPILE_FLAG([-O2], [CORE_FLAGS="$CORE_FLAGS -O2"], [], [$FLAG_WERROR])
+  ], [$FLAG_WERROR])
+
+  dnl We always enable at at least -g1 debug info to support proper stacktraces in crash infos
+  dnl Stacktraces will be suboptimal due to optimization, but better than nothing.
+  dnl Also, -fno-omit-frame-pointer mitigates this a little bit
+  if test "$GCC" = "yes"; then
+    DEBUG_FLAGS="$DEBUG_FLAGS -g1 -fno-omit-frame-pointer"
+  fi
 fi
 
 dnl Define enum mappings for relic config
