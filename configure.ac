@@ -760,7 +760,7 @@ if test "$use_hardening" != "no"; then
 
   case $host in
     *aarch64*)
-      AX_CHECK_COMPILE_FLAG([-mbranch-protection=bti], [HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -mbranch-protection=bti"], [], [[$CXXFLAG_WERROR]])
+      AX_CHECK_COMPILE_FLAG([-mbranch-protection=bti], [HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -mbranch-protection=bti"], [], [[$FLAG_WERROR]])
     ;;
   esac
 
