@@ -4,9 +4,14 @@
 
 LIBMIMALLOC = libmimalloc-secure.la
 
-MIMALLOC_CFLAGS = \
+MIMALLOC_CPPFLAGS = \
+    -DMI_ARCH_@MIMALLOC_ARCH@ \
 	-DMI_SECURE=4 \
     -DNDEBUG
+
+if OPTIMIZE
+MIMALLOC_CPPFLAGS += -DMI_OPT_SIMD=1
+endif
 
 MIMALLOC_INCLUDES = \
 	-I$(top_srcdir)/depends/mimalloc/include \
@@ -38,6 +43,9 @@ libmimalloc_secure_la_SOURCES = \
     depends/mimalloc/src/stats.c \
     depends/mimalloc/src/prim/prim.c
 
-libmimalloc_secure_la_CFLAGS = $(AM_CFLAGS) $(MIMALLOC_INCLUDES) $(MIMALLOC_CFLAGS)
+libmimalloc_secure_la_CPPFLAGS = $(AM_CPPFLAGS) $(MIMALLOC_CPPFLAGS) $(MIMALLOC_INCLUDES)
+libmimalloc_secure_la_CXXFLAGS = $(AM_CXXFLAGS)
+libmimalloc_secure_la_CFLAGS   = $(AM_CFLAGS)
+libmimalloc_secure_la_LDFLAGS  = $(AM_LDFLAGS)
 
 noinst_LTLIBRARIES += $(LIBMIMALLOC)

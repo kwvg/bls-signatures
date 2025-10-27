@@ -269,14 +269,8 @@ MD_SOURCES = \
 	depends/relic/src/md/sha384-512.c \
 	depends/relic/src/md/sha_private.h
 
-EXTRA_DIST += \
-	depends/relic/src/arch/relic_arch_arm.c \
-	depends/relic/src/arch/relic_arch_none.c \
-	depends/relic/src/arch/relic_arch_x64.c \
-	depends/relic/src/arch/relic_arch_x86.c
-
 RELIC_SOURCES += \
-	depends/relic/src/arch/relic_arch_@CPU_ARCH@.c \
+	depends/relic/src/arch/relic_arch_@RELIC_ARCH@.c \
 	depends/relic/src/rand/relic_rand_call.c \
 	depends/relic/src/rand/relic_rand_core.c \
 	depends/relic/src/rand/relic_rand_hashd.c \

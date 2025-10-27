@@ -462,42 +462,51 @@ fi
 
 use_pkgconfig=yes
 
+MIMALLOC_ARCH=""
 if test x"$use_optimizations" = x"yes"; then
   case $host_cpu in
     amd64 | x86_64)
       dnl Support for AMD64 (also known as x86_64 on some platforms) processors
-      CPU_ARCH="x64"
+      AX_CHECK_COMPILE_FLAG([-march=sandybridge -mavx], [CORE_FLAGS="$CORE_FLAGS -march=sandybridge -mavx"], [], [$FLAG_WERROR])
+      MIMALLOC_ARCH="x64"
+      RELIC_ARCH="x64"
       AC_DEFINE([ARCH], [X64], [Architecture.])
       AC_DEFINE([WSIZE], [64], [Size of word in this architecture.])
       ;;
     aarch*)
       dnl Support for 64-bit ARM processors
-      dnl Relic does not support aarch64 yet, set CPU_ARCH to none and ARCH to RELIC_NONE.
-      CPU_ARCH="none"
+      AX_CHECK_COMPILE_FLAG([-march=armv8.1-a], [CORE_FLAGS="$CORE_FLAGS -march=armv8.1-a"], [], [$FLAG_WERROR])
+      MIMALLOC_ARCH="arm64"
+      dnl Relic does not support aarch64 yet, set RELIC_ARCH to none and ARCH to RELIC_NONE.
+      RELIC_ARCH="none"
       AC_DEFINE([ARCH], [RELIC_NONE], [Architecture.])
       AC_DEFINE([WSIZE], [64], [Size of word in this architecture.])
       ;;
     i?86)
       dnl Support for Intel x86 processors
-      CPU_ARCH="x86"
+      AX_CHECK_COMPILE_FLAG([-march=pentium4 -msse2], [CORE_FLAGS="$CORE_FLAGS -march=pentium4 -msse2"], [], [$FLAG_WERROR])
+      MIMALLOC_ARCH="x86"
+      RELIC_ARCH="x86"
       AC_DEFINE([ARCH], [X86], [Architecture.])
       AC_DEFINE([WSIZE], [32], [Size of word in this architecture.])
       ;;
     arm*)
       dnl Support for 32-bit native ARM processors
-      CPU_ARCH="arm"
+      AX_CHECK_COMPILE_FLAG([-march=armv6+fp -mfloat-abi=hard], [CORE_FLAGS="$CORE_FLAGS -march=armv6+fp -mfloat-abi=hard"], [], [$FLAG_WERROR])
+      MIMALLOC_ARCH="arm32"
+      RELIC_ARCH="arm"
       AC_DEFINE([ARCH], [ARM], [Architecture.])
       AC_DEFINE([WSIZE], [32], [Size of word in this architecture.])
       ;;
     *64*)
       dnl Support for an undefined 64-bit architecture
-      CPU_ARCH="none"
+      RELIC_ARCH="none"
       AC_DEFINE([ARCH], [RELIC_NONE], [Architecture.])
       AC_DEFINE([WSIZE], [64], [Size of word in this architecture.])
       ;;
     *32*)
       dnl Support for an undefined 32-bit architecture
-      CPU_ARCH="none"
+      RELIC_ARCH="none"
       AC_DEFINE([ARCH], [RELIC_NONE], [Architecture.])
       AC_DEFINE([WSIZE], [32], [Size of word in this architecture.])
       ;;
@@ -509,13 +518,13 @@ else
   case $host_cpu in
     *64*)
       dnl Support for an undefined 64-bit architecture
-      CPU_ARCH="none"
+      RELIC_ARCH="none"
       AC_DEFINE([ARCH], [RELIC_NONE], [Architecture.])
       AC_DEFINE([WSIZE], [64], [Size of word in this architecture.])
       ;;
     *32* | arm* | i?86)
       dnl Support for an undefined 32-bit architecture
-      CPU_ARCH="none"
+      RELIC_ARCH="none"
       AC_DEFINE([ARCH], [RELIC_NONE], [Architecture.])
       AC_DEFINE([WSIZE], [32], [Size of word in this architecture.])
       ;;
@@ -900,7 +909,9 @@ AM_CONDITIONAL([OPTIMIZE], [test "$use_optimizations" = "yes"])
 AM_CONDITIONAL([ARITH_EASY], [test "$want_backend" = "easy"])
 AM_CONDITIONAL([ARITH_GMP], [test "$want_backend" = "gmp"])
 
-AC_SUBST(CPU_ARCH)
+AC_SUBST(MIMALLOC_ARCH)
+AC_SUBST(RELIC_ARCH)
+
 AC_SUBST(DEBUG_FLAGS)
 AC_SUBST(RAND_PATH, hashd)
 AC_SUBST(RELIC_CPPFLAGS)
