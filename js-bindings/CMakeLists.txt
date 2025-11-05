@@ -28,6 +28,10 @@ target_link_options(blsjstmp PRIVATE
     "SHELL:-s MALLOC=emmalloc"
 )
 
+if(CMAKE_BUILD_TYPE MATCHES "Debug")
+    target_link_options(blsjstmp PRIVATE "SHELL:-s ASSERTIONS=2")
+endif()
+
 # Copy necessary files for the npm package
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/package.json package.json COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/package-lock.json package-lock.json COPYONLY)
