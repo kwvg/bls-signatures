@@ -34,5 +34,5 @@ foreach(file ${JS_BINDINGS_TESTS})
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tests/${file} tests/${file} COPYONLY)
 endforeach()
 
-set_target_properties(blsjstmp PROPERTIES LINK_FLAGS "--bind -Oz --closure 1 -s MODULARIZE=1")
+set_target_properties(blsjstmp PROPERTIES LINK_FLAGS "--bind -Oz --closure 1 -sMODULARIZE=1 -sMALLOC=emmalloc")
 add_custom_command(TARGET blsjstmp POST_BUILD COMMAND npm run build:web)
