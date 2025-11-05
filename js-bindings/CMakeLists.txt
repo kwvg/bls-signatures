@@ -20,6 +20,14 @@ add_custom_target(install_npm_dependencies npm ci)
 add_dependencies(blsjstmp install_npm_dependencies)
 target_link_libraries(blsjstmp PRIVATE dashbls)
 
+target_link_options(blsjstmp PRIVATE
+    "SHELL:--bind"
+    "SHELL:-Oz"
+    "SHELL:--closure 1"
+    "SHELL:-s MODULARIZE=1"
+    "SHELL:-s MALLOC=emmalloc"
+)
+
 # Copy necessary files for the npm package
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/package.json package.json COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/package-lock.json package-lock.json COPYONLY)
@@ -34,5 +42,4 @@ foreach(file ${JS_BINDINGS_TESTS})
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tests/${file} tests/${file} COPYONLY)
 endforeach()
 
-set_target_properties(blsjstmp PROPERTIES LINK_FLAGS "--bind -Oz --closure 1 -sMODULARIZE=1 -sMALLOC=emmalloc")
 add_custom_command(TARGET blsjstmp POST_BUILD COMMAND npm run build:web)
