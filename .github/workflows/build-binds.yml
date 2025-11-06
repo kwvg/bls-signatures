@@ -17,13 +17,14 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.os }}, Python ${{ matrix.python }}, Go ${{ matrix.golang }}
+    name: ${{ matrix.os }}, Python ${{ matrix.python }}, Go ${{ matrix.golang }}, Rust ${{ matrix.rust }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest]
         golang: [ '1.22' ]
+        rust: [ '1.91.0' ]
         python: ['3.9', '3.10', '3.11', '3.12']
 
     steps:
@@ -82,3 +83,15 @@ jobs:
       run: |
         cd go-bindings
         make
+
+    - name: Install Rust
+      run: |
+        rustup toolchain install ${{ matrix.rust }}
+        rustup default ${{ matrix.rust }}
+        rustc --version
+        cargo --version
+
+    - name: Build and test Rust bindings
+      run: |
+        cd rust-bindings/bls-dash-sys
+        cargo test
