@@ -13,11 +13,24 @@ CURR_DIR := $(dir $(MAKEFILE_PATH))
 
 CGO_ENABLED := 1
 
+# Build paths
+MIMALLOC_DIR := $(CURR_DIR)../build/depends/mimalloc
+RELIC_LIB_DIR := $(CURR_DIR)../build/depends/relic/lib
+DASHBLS_LIB_DIR := $(CURR_DIR)../build/src
+
+# Auto-detect mimalloc library name (release: mimalloc-secure, debug: mimalloc-secure-debug)
+MIMALLOC_LIB := $(shell \
+	if [ -f "$(MIMALLOC_DIR)/libmimalloc-secure-debug.a" ]; then \
+		echo "mimalloc-secure-debug"; \
+	else \
+		echo "mimalloc-secure"; \
+	fi)
+
 CGO_LDFLAGS ?= "\
--L$(CURR_DIR)../build/depends/mimalloc \
--L$(CURR_DIR)../build/depends/relic/lib \
--L$(CURR_DIR)../build/src \
--ldashbls -lrelic_s -lmimalloc-secure -lgmp"
+-L$(MIMALLOC_DIR) \
+-L$(RELIC_LIB_DIR) \
+-L$(DASHBLS_LIB_DIR) \
+-ldashbls -lrelic_s -l$(MIMALLOC_LIB) -lgmp"
 
 CGO_CXXFLAGS ?= "\
 -I$(CURR_DIR)../build/depends/relic/include \
