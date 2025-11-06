@@ -201,12 +201,21 @@ fn main() {
 
     println!("cargo:rustc-link-lib=static=relic_s");
 
+    let mimalloc_dir = root_path.join("build/depends/mimalloc");
+
     println!(
         "cargo:rustc-link-search={}",
-        root_path.join("build/depends/mimalloc").display()
+        mimalloc_dir.display()
     );
 
-    println!("cargo:rustc-link-lib=static=mimalloc-secure");
+    // Auto-detect mimalloc library name (release: mimalloc-secure, debug: mimalloc-secure-debug)
+    let mimalloc_lib = if mimalloc_dir.join("libmimalloc-secure-debug.a").exists() {
+        "mimalloc-secure-debug"
+    } else {
+        "mimalloc-secure"
+    };
+
+    println!("cargo:rustc-link-lib=static={}", mimalloc_lib);
 
     println!(
         "cargo:rustc-link-search={}",
