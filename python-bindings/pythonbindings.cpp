@@ -637,7 +637,7 @@ PYBIND11_MODULE(blspy, m)
 
             if ((int)info.size != GTElement::SIZE) {
                 throw std::invalid_argument(
-                    "Length of bytes object not equal to G2Element::SIZE");
+                    "Length of bytes object not equal to GTElement::SIZE");
             }
             auto data_ptr = static_cast<uint8_t *>(info.ptr);
             std::array<uint8_t, GTElement::SIZE> data;
@@ -646,7 +646,7 @@ PYBIND11_MODULE(blspy, m)
             return GTElement::FromBytes(data);
         }))
         .def(py::init([](py::int_ pyint) {
-            std::array<uint8_t, G1Element::SIZE> buffer{};
+            std::array<uint8_t, GTElement::SIZE> buffer{};
             if (_PyLong_AsByteArray(
                     (PyLongObject *)pyint.ptr(),
                     buffer.data(),
