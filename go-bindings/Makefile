@@ -30,8 +30,9 @@ else ifeq ("$(OS)", "Linux")
 endif
 
 MIMALLOC_LIB := mimalloc-secure
+MIMALLOC_LIB_PATH := $(CURR_DIR)../build/depends/mimalloc
 
-ifneq ($(wildcard $(MIMALLOC_PREFIX)/libmimalloc-secure-debug.a),)
+ifneq ($(wildcard $(MIMALLOC_LIB_PATH)/libmimalloc-secure-debug.a),)
   MIMALLOC_LIB := mimalloc-secure-debug
 endif
 
@@ -45,7 +46,7 @@ CGO_CXXFLAGS ?= "\
 CGO_LDFLAGS ?= "\
 -L$(CURR_DIR)../build/src -ldashbls \
 -L$(GMP_PREFIX)/lib -lgmp \
--L$(CURR_DIR)../build/depends/mimalloc -l$(MIMALLOC_LIB) \
+-L$(MIMALLOC_LIB_PATH) -l$(MIMALLOC_LIB) \
 -L$(CURR_DIR)../build/depends/relic/lib -lrelic_s"
 
 .PHONY: default vet test clean config
