@@ -1,5 +1,5 @@
-GO="go"
-CGO_ENABLED := 1
+export CGO_ENABLED := 1
+GO=go
 
 OS := $(shell uname -s)
 ARCH := $(shell uname -m)
@@ -8,9 +8,9 @@ COVERAGE_OUTPUT ?= coverage.out
 
 MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 
-BUILD_DIR=$(PWD)/../build
+BUILD_DIR=$(CURDIR)/../build
 CURR_DIR := $(dir $(MAKEFILE_PATH))
-SRC_DIR=$(PWD)/../src
+SRC_DIR=$(CURDIR)/../src
 
 GMP_PREFIX := /usr/local
 
@@ -37,12 +37,14 @@ CGO_CXXFLAGS ?= "\
 -I$(GMP_PREFIX)/include"
 
 CGO_LDFLAGS ?= "\
+-L$(CURR_DIR)../build/src -ldashbls \
 -L$(CURR_DIR)../build/depends/mimalloc -lmimalloc-secure \
 -L$(CURR_DIR)../build/depends/relic/lib -lrelic_s \
--L$(CURR_DIR)../build/src -ldashbls \
 -L$(GMP_PREFIX)/lib -lgmp"
 
-.PHONY: default vet test clean config
+.PHONY: default prepare fmt test cover vet help clean config
+
+all: default
 
 default: prepare vet test clean
 
@@ -63,7 +65,7 @@ cover:  ## Run tests and generate test coverage file, output coverage results an
 	rm -f $(COVERAGE_OUTPUT)
 
 vet:  ## Go vet all project code
-	CGO_CXXFLAGS=$(CGO_CXXFLAGS) CGO_LDFLAGS=$(CGO_LDFLAGS) go vet ./...
+	CGO_CXXFLAGS=$(CGO_CXXFLAGS) CGO_LDFLAGS=$(CGO_LDFLAGS) $(GO) vet ./...
 
 help: ## Show This Help
 	@for line in $$(cat Makefile | grep "##" | grep -v "grep" | sed  "s/:.*##/:/g" | sed "s/\ /!/g"); do verb=$$(echo $$line | cut -d ":" -f 1); desc=$$(echo $$line | cut -d ":" -f 2 | sed "s/!/\ /g"); printf "%-30s--%s\n" "$$verb" "$$desc"; done
