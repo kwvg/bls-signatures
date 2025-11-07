@@ -38,7 +38,7 @@ func G1ElementFromBytes(data []byte) (*G1Element, error) {
 	defer C.free(cBytesPtr)
 	var cDidErr C.bool
 	el := G1Element{
-		val: C.CG1ElementFromBytes(cBytesPtr, &cDidErr),
+		val: C.CG1ElementFromBytes(cBytesPtr, C.size_t(len(data)), &cDidErr),
 	}
 	if bool(cDidErr) {
 		return nil, errFromC()
@@ -129,7 +129,7 @@ func G2ElementFromBytes(data []byte) (*G2Element, error) {
 	defer C.free(cBytesPtr)
 	var cDidErr C.bool
 	el := G2Element{
-		val: C.CG2ElementFromBytes(cBytesPtr, &cDidErr),
+		val: C.CG2ElementFromBytes(cBytesPtr, C.size_t(len(data)), &cDidErr),
 	}
 	if bool(cDidErr) {
 		return nil, errFromC()
