@@ -38,7 +38,7 @@ func PrivateKeyFromBytes(data []byte, modOrder bool) (*PrivateKey, error) {
 	defer C.SecFree(cBytesPtr)
 	var cDidErr C.bool
 	sk := PrivateKey{
-		val: C.CPrivateKeyFromBytes(cBytesPtr, C.bool(modOrder), &cDidErr),
+		val: C.CPrivateKeyFromBytes(cBytesPtr, C.size_t(len(data)), C.bool(modOrder), &cDidErr),
 	}
 	if bool(cDidErr) {
 		return nil, errFromC()
