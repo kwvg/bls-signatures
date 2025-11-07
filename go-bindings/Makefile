@@ -1,17 +1,19 @@
-SRC_DIR=$(PWD)/../src
-BUILD_DIR=$(PWD)/../build
-
 GO="go"
+CGO_ENABLED := 1
+
 COVERAGE_OUTPUT ?= coverage.out
 
-.PHONY: default vet test clean
-
-default: prepare vet test clean
-
 MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
-CURR_DIR := $(dir $(MAKEFILE_PATH))
 
-CGO_ENABLED := 1
+BUILD_DIR=$(PWD)/../build
+CURR_DIR := $(dir $(MAKEFILE_PATH))
+SRC_DIR=$(PWD)/../src
+
+CGO_CXXFLAGS ?= "\
+-I$(CURR_DIR)../build/depends/relic/include \
+-I$(CURR_DIR)../depends/mimalloc/include \
+-I$(CURR_DIR)../depends/relic/include \
+-I$(CURR_DIR)../include"
 
 CGO_LDFLAGS ?= "\
 -L$(CURR_DIR)../build/depends/mimalloc \
@@ -19,11 +21,9 @@ CGO_LDFLAGS ?= "\
 -L$(CURR_DIR)../build/src \
 -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
 
-CGO_CXXFLAGS ?= "\
--I$(CURR_DIR)../build/depends/relic/include \
--I$(CURR_DIR)../depends/mimalloc/include \
--I$(CURR_DIR)../depends/relic/include \
--I$(CURR_DIR)../include"
+.PHONY: default vet test clean
+
+default: prepare vet test clean
 
 prepare:
 	@mkdir -p ../build/src/dashbls
