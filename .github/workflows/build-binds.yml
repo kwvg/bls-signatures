@@ -80,6 +80,7 @@ jobs:
     - name: Build Go bindings
       run: |
         cd go-bindings
+        make config
         make
 
     - name: Install Rust

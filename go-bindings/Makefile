@@ -1,4 +1,4 @@
-GO="go"
+GO=go
 CGO_ENABLED := 1
 
 OS := $(shell uname -s)
@@ -39,14 +39,10 @@ ifneq ($(wildcard $(MIMALLOC_PREFIX)/libmimalloc-secure-debug.a),)
 endif
 
 CGO_LDFLAGS ?= "\
--L$(DASHBLS_PREFIX) \
--L$(GMP_PREFIX)/lib \
--L$(MIMALLOC_PREFIX) \
--L$(RELIC_PREFIX)/lib \
--ldashbls \
--lgmp \
--l$(MIMALLOC_LIB) \
--lrelic_s"
+-L$(DASHBLS_PREFIX) -ldashbls \
+-L$(GMP_PREFIX)/lib -lgmp \
+-L$(MIMALLOC_PREFIX) -l$(MIMALLOC_LIB) \
+-L$(RELIC_PREFIX)/lib -lrelic_s"
 
 CGO_CXXFLAGS ?= "\
 -I$(CURR_DIR)../include \
@@ -55,7 +51,7 @@ CGO_CXXFLAGS ?= "\
 -I$(MIMALLOC_PREFIX)/include \
 -I$(RELIC_PREFIX)/include"
 
-.PHONY: default vet test clean
+.PHONY: default vet test clean config
 
 default: prepare vet test clean
 
@@ -80,6 +76,17 @@ vet:  ## Go vet all project code
 
 help: ## Show This Help
 	@for line in $$(cat Makefile | grep "##" | grep -v "grep" | sed  "s/:.*##/:/g" | sed "s/\ /!/g"); do verb=$$(echo $$line | cut -d ":" -f 1); desc=$$(echo $$line | cut -d ":" -f 2 | sed "s/!/\ /g"); printf "%-30s--%s\n" "$$verb" "$$desc"; done
+
+config: ## Display build configuration
+	@echo "OS:           $(OS)"
+	@echo "ARCH:         $(ARCH)"
+	@echo ""
+	@echo "CC:           $${CC:-<not set>}"
+	@echo "CXX:          $${CXX:-<not set>}"
+	@echo "GO:           $(GO)"
+	@echo ""
+	@echo "CGO_CXXFLAGS: $(CGO_CXXFLAGS)"
+	@echo "CGO_LDFLAGS:  $(CGO_LDFLAGS)"
 
 clean: ## Clean up transient (generated) files
 	$(GO) clean
