@@ -1,6 +1,9 @@
 GO="go"
 CGO_ENABLED := 1
 
+OS := $(shell uname -s)
+ARCH := $(shell uname -m)
+
 COVERAGE_OUTPUT ?= coverage.out
 
 MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
@@ -9,19 +12,37 @@ BUILD_DIR=$(PWD)/../build
 CURR_DIR := $(dir $(MAKEFILE_PATH))
 SRC_DIR=$(PWD)/../src
 
+GMP_PREFIX := /usr/local
+
+ifeq ("$(OS)", "Darwin")
+  ifneq ($(wildcard /opt/local/bin/port),)
+    GMP_PREFIX := /opt/local
+  endif
+  ifeq ("$(ARCH)", "arm64")
+    ifneq ($(wildcard /opt/homebrew/bin/brew),)
+      GMP_PREFIX := /opt/homebrew
+    endif
+  endif
+else ifeq ("$(OS)", "Linux")
+  ifneq ($(wildcard /home/linuxbrew/.linuxbrew/bin/brew),)
+    GMP_PREFIX := /home/linuxbrew/.linuxbrew
+  endif
+endif
+
 CGO_CXXFLAGS ?= "\
 -I$(CURR_DIR)../build/depends/relic/include \
 -I$(CURR_DIR)../depends/mimalloc/include \
 -I$(CURR_DIR)../depends/relic/include \
--I$(CURR_DIR)../include"
+-I$(CURR_DIR)../include \
+-I$(GMP_PREFIX)/include"
 
 CGO_LDFLAGS ?= "\
--L$(CURR_DIR)../build/depends/mimalloc \
--L$(CURR_DIR)../build/depends/relic/lib \
--L$(CURR_DIR)../build/src \
--ldashbls -lrelic_s -lmimalloc-secure -lgmp"
+-L$(CURR_DIR)../build/depends/mimalloc -lmimalloc-secure \
+-L$(CURR_DIR)../build/depends/relic/lib -lrelic_s \
+-L$(CURR_DIR)../build/src -ldashbls \
+-L$(GMP_PREFIX)/lib -lgmp"
 
-.PHONY: default vet test clean
+.PHONY: default vet test clean config
 
 default: prepare vet test clean
 
@@ -50,3 +71,18 @@ help: ## Show This Help
 clean: ## Clean up transient (generated) files
 	$(GO) clean
 	rm -f $(COVERAGE_OUTPUT)
+
+config: ## Display build configuration
+	@echo ""
+	@echo "OS:           $(OS)"
+	@echo "ARCH:         $(ARCH)"
+	@echo ""
+	@echo "CC:           $${CC:-<not set>}"
+	@echo "CXX:          $${CXX:-<not set>}"
+	@echo "GO:           $(GO)"
+	@echo ""
+	@echo "GOROOT:       $${GOROOT:-<not set>}"
+	@echo ""
+	@echo "CGO_CXXFLAGS: $(CGO_CXXFLAGS)"
+	@echo "CGO_LDFLAGS:  $(CGO_LDFLAGS)"
+	@echo ""
