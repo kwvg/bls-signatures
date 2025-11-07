@@ -46,9 +46,21 @@ if(BUILD_BLS_TESTS)
   target_link_libraries(runtest
                         PRIVATE dashbls
                         PRIVATE catch2)
+
+  if(EMSCRIPTEN)
+    if(CMAKE_BUILD_TYPE MATCHES "Debug")
+      target_link_options(runtest PRIVATE "SHELL:-s ASSERTIONS=2")
+    endif()
+  endif()
 endif()
 
 if(BUILD_BLS_BENCHMARKS)
   add_executable(runbench test-bench.cpp)
   target_link_libraries(runbench PRIVATE dashbls)
+
+  if(EMSCRIPTEN)
+    if(CMAKE_BUILD_TYPE MATCHES "Debug")
+      target_link_options(runbench PRIVATE "SHELL:-s ASSERTIONS=2")
+    endif()
+  endif()
 endif()
