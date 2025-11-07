@@ -12,10 +12,7 @@ BUILD_DIR=$(PWD)/../build
 CURR_DIR := $(dir $(MAKEFILE_PATH))
 SRC_DIR=$(PWD)/../src
 
-DASHBLS_PREFIX := $(CURR_DIR)../build/src
 GMP_PREFIX := /usr/local
-MIMALLOC_PREFIX := $(CURR_DIR)../build/depends/mimalloc
-RELIC_PREFIX := $(CURR_DIR)../build/depends/relic
 
 ifeq ("$(OS)", "Darwin")
   ifneq ($(wildcard /opt/local/bin/port),)
@@ -38,18 +35,17 @@ ifneq ($(wildcard $(MIMALLOC_PREFIX)/libmimalloc-secure-debug.a),)
   MIMALLOC_LIB := mimalloc-secure-debug
 endif
 
-CGO_LDFLAGS ?= "\
--L$(DASHBLS_PREFIX) -ldashbls \
--L$(GMP_PREFIX)/lib -lgmp \
--L$(MIMALLOC_PREFIX) -l$(MIMALLOC_LIB) \
--L$(RELIC_PREFIX)/lib -lrelic_s"
-
 CGO_CXXFLAGS ?= "\
 -I$(CURR_DIR)../include \
--I$(DASHBLS_PREFIX)/include \
 -I$(GMP_PREFIX)/include \
--I$(MIMALLOC_PREFIX)/include \
--I$(RELIC_PREFIX)/include"
+-I$(CURR_DIR)../depends/mimalloc/include \
+-I$(CURR_DIR)../depends/relic/include"
+
+CGO_LDFLAGS ?= "\
+-L$(CURR_DIR)../build/src -ldashbls \
+-L$(GMP_PREFIX)/lib -lgmp \
+-L$(CURR_DIR)../build/depends/mimalloc -l$(MIMALLOC_LIB) \
+-L$(CURR_DIR)../build/depends/relic/lib -lrelic_s"
 
 .PHONY: default vet test clean config
 
@@ -84,6 +80,8 @@ config: ## Display build configuration
 	@echo "CC:           $${CC:-<not set>}"
 	@echo "CXX:          $${CXX:-<not set>}"
 	@echo "GO:           $(GO)"
+	@echo ""
+	@echo "GOROOT:       $${GOROOT:-<not set>}"
 	@echo ""
 	@echo "CGO_CXXFLAGS: $(CGO_CXXFLAGS)"
 	@echo "CGO_LDFLAGS:  $(CGO_LDFLAGS)"
