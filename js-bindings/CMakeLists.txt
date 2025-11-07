@@ -25,6 +25,9 @@ target_link_options(blsjstmp PRIVATE
     "SHELL:-Oz"
     "SHELL:--closure 1"
     "SHELL:-s MODULARIZE=1"
+    "SHELL:-s MALLOC=emmalloc"
+    "SHELL:-s ALLOW_MEMORY_GROWTH=1"
+    "SHELL:-s INITIAL_MEMORY=134217728"
 )
 
 if(CMAKE_BUILD_TYPE MATCHES "Debug")
