@@ -1,42 +1,63 @@
-SRC_DIR=$(PWD)/../src
-BUILD_DIR=$(PWD)/../build
-
 GO="go"
+CGO_ENABLED := 1
+
+OS := $(shell uname -s)
+ARCH := $(shell uname -m)
+
 COVERAGE_OUTPUT ?= coverage.out
+
+MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+
+BUILD_DIR=$(PWD)/../build
+CURR_DIR := $(dir $(MAKEFILE_PATH))
+SRC_DIR=$(PWD)/../src
+
+DASHBLS_PREFIX := $(CURR_DIR)../build/src
+GMP_PREFIX := /usr/local
+MIMALLOC_PREFIX := $(CURR_DIR)../build/depends/mimalloc
+RELIC_PREFIX := $(CURR_DIR)../build/depends/relic
+
+ifeq ("$(OS)", "Darwin")
+  ifneq ($(wildcard /opt/local/bin/port),)
+    GMP_PREFIX := /opt/local
+  endif
+ifeq ("$(ARCH)", "arm64")
+  ifneq ($(wildcard /opt/homebrew/bin/brew),)
+    GMP_PREFIX := /opt/homebrew
+  endif
+endif
+else ifeq ("$(OS)", "Linux")
+  ifneq ($(wildcard /home/linuxbrew/.linuxbrew/bin/brew),)
+    GMP_PREFIX := /home/linuxbrew/.linuxbrew
+  endif
+endif
+
+MIMALLOC_LIB := mimalloc-secure
+
+ifneq ($(wildcard $(MIMALLOC_PREFIX)/libmimalloc-secure-debug.a),)
+  MIMALLOC_LIB := mimalloc-secure-debug
+endif
+
+CGO_LDFLAGS ?= "\
+-L$(DASHBLS_PREFIX) \
+-L$(GMP_PREFIX)/lib \
+-L$(MIMALLOC_PREFIX) \
+-L$(RELIC_PREFIX)/lib \
+-ldashbls \
+-lgmp \
+-l$(MIMALLOC_LIB) \
+-lrelic_s"
+
+CGO_CXXFLAGS ?= "\
+-I$(CURR_DIR)../include \
+-I$(DASHBLS_PREFIX)/include \
+-I$(GMP_PREFIX)/include \
+-I$(MIMALLOC_PREFIX)/include \
+-I$(RELIC_PREFIX)/include"
 
 .PHONY: default vet test clean
 
 default: prepare vet test clean
-
-MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
-CURR_DIR := $(dir $(MAKEFILE_PATH))
-
-CGO_ENABLED := 1
-
-# Build paths
-MIMALLOC_DIR := $(CURR_DIR)../build/depends/mimalloc
-RELIC_LIB_DIR := $(CURR_DIR)../build/depends/relic/lib
-DASHBLS_LIB_DIR := $(CURR_DIR)../build/src
-
-# Auto-detect mimalloc library name (release: mimalloc-secure, debug: mimalloc-secure-debug)
-MIMALLOC_LIB := $(shell \
-	if [ -f "$(MIMALLOC_DIR)/libmimalloc-secure-debug.a" ]; then \
-		echo "mimalloc-secure-debug"; \
-	else \
-		echo "mimalloc-secure"; \
-	fi)
-
-CGO_LDFLAGS ?= "\
--L$(MIMALLOC_DIR) \
--L$(RELIC_LIB_DIR) \
--L$(DASHBLS_LIB_DIR) \
--ldashbls -lrelic_s -l$(MIMALLOC_LIB) -lgmp"
-
-CGO_CXXFLAGS ?= "\
--I$(CURR_DIR)../build/depends/relic/include \
--I$(CURR_DIR)../depends/mimalloc/include \
--I$(CURR_DIR)../depends/relic/include \
--I$(CURR_DIR)../include"
 
 prepare:
 	@mkdir -p ../build/src/dashbls
