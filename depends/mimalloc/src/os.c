@@ -20,10 +20,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
+#if defined(__APPLE__) && defined(__aarch64__)
+#define MI_PLATFORM_PAGE_SIZE 16*MI_KiB // 16 KiB
+#elif defined(__EMSCRIPTEN__)
+#define MI_PLATFORM_PAGE_SIZE 64*MI_KiB // 64 KiB
+#else
+#define MI_PLATFORM_PAGE_SIZE  4*MI_KiB //  4 KiB
+#endif
+
 static mi_os_mem_config_t mi_os_mem_config = {
-  4096,     // page size
+  MI_PLATFORM_PAGE_SIZE, // page size
   0,        // large page size (usually 2MiB)
-  4096,     // allocation granularity
+  MI_PLATFORM_PAGE_SIZE, // allocation granularity
   MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB,
   MI_MAX_VABITS, // in `bits.h`
   true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
