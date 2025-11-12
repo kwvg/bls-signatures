@@ -25,6 +25,16 @@
 namespace py = pybind11;
 using namespace bls;
 
+namespace {
+inline int PyLong_AsByteArray(PyLongObject* obj, uint8_t* buf, Py_ssize_t size, bool is_le, bool is_signed)
+{
+    return _PyLong_AsByteArray(obj, buf, size, is_le, is_signed
+#if PY_VERSION_HEX >= 0x030d0000
+                               , /*with_exceptions=*/true
+#endif // PY_VERSION_HEX >= 0x030d0000
+    );
+}
+} // anonymous namespace
 
 PYBIND11_MODULE(blspy, m)
 {
@@ -357,7 +367,7 @@ PYBIND11_MODULE(blspy, m)
         .def(py::init(&G1Element::FromByteVector), py::call_guard<py::gil_scoped_release>())
         .def(py::init([](py::int_ pyint) {
             std::array<uint8_t, G1Element::SIZE> buffer{};
-            if (_PyLong_AsByteArray(
+            if (PyLong_AsByteArray(
                     (PyLongObject *)pyint.ptr(),
                     buffer.data(),
                     buffer.size(),
@@ -515,7 +525,7 @@ PYBIND11_MODULE(blspy, m)
         }))
         .def(py::init([](py::int_ pyint) {
             std::array<uint8_t, G2Element::SIZE> buffer{};
-            if (_PyLong_AsByteArray(
+            if (PyLong_AsByteArray(
                     (PyLongObject *)pyint.ptr(),
                     buffer.data(),
                     buffer.size(),
@@ -647,7 +657,7 @@ PYBIND11_MODULE(blspy, m)
         }))
         .def(py::init([](py::int_ pyint) {
             std::array<uint8_t, GTElement::SIZE> buffer{};
-            if (_PyLong_AsByteArray(
+            if (PyLong_AsByteArray(
                     (PyLongObject *)pyint.ptr(),
                     buffer.data(),
                     buffer.size(),
