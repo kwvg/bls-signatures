@@ -74,7 +74,7 @@ jobs:
     - name: Build library using CMake
       run: |
         mkdir -p build && cd build
-        cmake ..
+        cmake .. -DCMAKE_BUILD_TYPE=Debug
         cmake --build . -- -j 6
 
     - name: Build Go bindings
