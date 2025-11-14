@@ -574,14 +574,14 @@ bool AugSchemeMPL::AggregateVerify(const vector<G1Element>& pubkeys,
 G2Element PopSchemeMPL::PopProve(const PrivateKey &seckey)
 {
     const G1Element& pk = seckey.GetG1Element();
-    const G2Element hashedKey = G2Element::FromMessage(pk.Serialize(), (const uint8_t *)POP_CIPHERSUITE_ID.c_str(), POP_CIPHERSUITE_ID.length());
+    const G2Element hashedKey = G2Element::FromMessage(pk.SerializeToArray(), (const uint8_t *)POP_CIPHERSUITE_ID.c_str(), POP_CIPHERSUITE_ID.length());
     return seckey.GetG2Power(hashedKey);
 }
 
 
 bool PopSchemeMPL::PopVerify(const G1Element &pubkey, const G2Element &signature_proof)
 {
-    const G2Element hashedPoint = G2Element::FromMessage(pubkey.Serialize(), (const uint8_t*)POP_CIPHERSUITE_ID.c_str(), POP_CIPHERSUITE_ID.length());
+    const G2Element hashedPoint = G2Element::FromMessage(pubkey.SerializeToArray(), (const uint8_t*)POP_CIPHERSUITE_ID.c_str(), POP_CIPHERSUITE_ID.length());
 
     g1_t g1s[2];
     g2_t g2s[2];
