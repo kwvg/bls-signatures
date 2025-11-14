@@ -223,6 +223,9 @@ G2Element CoreMPL::AggregateSecure(std::vector<G1Element> const &vecPublicKeys,
 
     G2Element aggSig = CoreMPL::Aggregate(expSigs);
 
+    for (size_t i = 0; i < vecPublicKeys.size(); i++) {
+        bn_free(computedTs[i]);
+    }
     delete[] computedTs;
 
     return aggSig;
@@ -262,6 +265,9 @@ bool CoreMPL::VerifySecure(const std::vector<G1Element>& vecPublicKeys,
     }
 
     bn_free(one);
+    for (size_t i = 0; i < vecPublicKeys.size(); i++) {
+        bn_free(computedTs[i]);
+    }
     delete[] computedTs;
 
     return AggregateVerify({publicKey}, {message}, {signature});
