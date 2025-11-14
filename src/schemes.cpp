@@ -207,7 +207,7 @@ G2Element CoreMPL::AggregateSecure(std::vector<G1Element> const &vecPublicKeys,
         vecSorted[i] = std::make_pair(vecPublicKeys[i].SerializeToArray(fLegacy), &vecSignatures[i]);
     }
     std::sort(vecSorted.begin(), vecSorted.end(), [](const auto& a, const auto& b) {
-        return std::memcmp(a.first.begin(), b.first.begin(), G1Element::SIZE) < 0;
+        return std::memcmp(a.first.data(), b.first.data(), G1Element::SIZE) < 0;
     });
 
     HashPubKeys(computedTs, vecSorted.size(),
