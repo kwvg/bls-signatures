@@ -143,7 +143,7 @@ namespace bls {
     template<>
     struct PolyOps<G1Element> : PolyOpsBase {
         G1Element Add(const G1Element& a, const G1Element& b) {
-            return pThresholdScheme->Aggregate({a, b});
+            return a + b;
         }
 
         G1Element Mul(const G1Element& a, const bn_t& b) {
@@ -154,7 +154,7 @@ namespace bls {
     template<>
     struct PolyOps<G2Element> : PolyOpsBase {
         G2Element Add(const G2Element& a, const G2Element& b) {
-            return pThresholdScheme->Aggregate({a, b});
+            return a + b;
         }
 
         G2Element Mul(const G2Element& a, bn_t& b) {
