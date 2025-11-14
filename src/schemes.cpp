@@ -257,7 +257,7 @@ bool CoreMPL::VerifySecure(const std::vector<G1Element>& vecPublicKeys,
     G1Element publicKey;
     for (size_t i = 0; i < vecSorted.size(); ++i) {
         G1Element g1 = G1Element::FromBytes(Bytes(vecSorted[i]), fLegacy);
-        publicKey = CoreMPL::Aggregate({publicKey, g1 * computedTs[i]});
+        publicKey += g1 * computedTs[i];
     }
 
     for (size_t i = 0; i < vecPublicKeys.size(); i++) {
