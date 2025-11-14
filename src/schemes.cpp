@@ -150,22 +150,22 @@ bool CoreMPL::Verify(const G1Element& pubkey, const Bytes& message, const G2Elem
     return CoreMPL::NativeVerify(g1s.data(), g2s.data(), 2);
 }
 
-vector<uint8_t> CoreMPL::Aggregate(const vector<vector<uint8_t>> &signatures)
+std::array<uint8_t, G2Element::SIZE> CoreMPL::Aggregate(const vector<vector<uint8_t>> &signatures)
 {
     vector<G2Element> elements;
     for (const vector<uint8_t>& signature : signatures) {
         elements.push_back(G2Element::FromByteVector(signature));
     }
-    return CoreMPL::Aggregate(elements).Serialize();
+    return CoreMPL::Aggregate(elements).SerializeToArray();
 }
 
-vector<uint8_t> CoreMPL::Aggregate(const vector<Bytes>& signatures)
+std::array<uint8_t, G2Element::SIZE> CoreMPL::Aggregate(const vector<Bytes>& signatures)
 {
     vector<G2Element> elements;
     for (const Bytes& signature : signatures) {
         elements.push_back(G2Element::FromBytes(signature));
     }
-    return CoreMPL::Aggregate(elements).Serialize();
+    return CoreMPL::Aggregate(elements).SerializeToArray();
 }
 
 G2Element CoreMPL::Aggregate(const vector<G2Element> &signatures)
