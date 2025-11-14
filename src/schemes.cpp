@@ -54,6 +54,7 @@ static void HashPubKeys(bn_t* computedTs, const std::vector<std::array<uint8_t, 
         bn_read_bin(computedTs[i], hash, 32);
         bn_mod_basic(computedTs[i], computedTs[i], order);
     }
+    bn_free(order);
 }
 
 enum InvariantResult { BAD=false, GOOD=true, CONTINUE };
