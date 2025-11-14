@@ -92,13 +92,16 @@ namespace bls {
 
     struct PolyOpsBase {
         bn_t order;
+        bn_t iv;
 
         PolyOpsBase() {
             bn_new(order);
             gt_get_ord(order);
+            bn_new(iv);
         }
 
         ~PolyOpsBase() {
+            bn_free(iv);
             bn_free(order);
         }
 
@@ -118,8 +121,6 @@ namespace bls {
         }
 
         void DivFP(bn_t& r, const bn_t& a, const bn_t& b) {
-            bn_t iv;
-            bn_new(iv);
             fp_inv_exgcd_bn(iv, b, order);
             bn_mul(r, a, iv);
             ModOrder(r);
