@@ -98,6 +98,10 @@ namespace bls {
             gt_get_ord(order);
         }
 
+        ~PolyOpsBase() {
+            bn_free(order);
+        }
+
         void MulFP(bn_t& r, const bn_t& a, const bn_t& b) {
             bn_mul(r, a, b);
             ModOrder(r);
