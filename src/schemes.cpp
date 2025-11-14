@@ -27,21 +27,23 @@ using std::vector;
 
 namespace bls {
 
-static void HashPubKeys(bn_t* computedTs, const std::vector<std::array<uint8_t, G1Element::SIZE>>& vecPubKeyBytes)
+template <typename GetBytesFn>
+static void HashPubKeys(bn_t* computedTs, size_t nPubKeys, GetBytesFn getBytes)
 {
     bn_t order;
     bn_new(order);
     g2_get_ord(order);
 
-    std::vector<uint8_t> vecBuffer(vecPubKeyBytes.size() * G1Element::SIZE);
+    std::vector<uint8_t> vecBuffer(nPubKeys * G1Element::SIZE);
 
-    for (size_t i = 0; i < vecPubKeyBytes.size(); i++) {
-        memcpy(vecBuffer.data() + i * G1Element::SIZE, vecPubKeyBytes[i].begin(), G1Element::SIZE);
+    for (size_t i = 0; i < nPubKeys; i++) {
+        const uint8_t* pkBytes = getBytes(i);
+        memcpy(vecBuffer.data() + i * G1Element::SIZE, pkBytes, G1Element::SIZE);
     }
 
     uint8_t pkHash[32];
-    Util::Hash256(pkHash, vecBuffer.data(), vecPubKeyBytes.size() * G1Element::SIZE);
-    for (size_t i = 0; i < vecPubKeyBytes.size(); ++i) {
+    Util::Hash256(pkHash, vecBuffer.data(), nPubKeys * G1Element::SIZE);
+    for (size_t i = 0; i < nPubKeys; ++i) {
         uint8_t hash[32];
         uint8_t buffer[4 + 32];
         memset(buffer, 0, 4);
@@ -206,13 +208,8 @@ G2Element CoreMPL::AggregateSecure(std::vector<G1Element> const &vecPublicKeys,
         return std::memcmp(a.first.begin(), b.first.begin(), G1Element::SIZE) < 0;
     });
 
-    std::vector<std::array<uint8_t, G1Element::SIZE>> vecPublicKeyBytes;
-    vecPublicKeyBytes.reserve(vecPublicKeys.size());
-    for (const auto& it : vecSorted) {
-        vecPublicKeyBytes.push_back(it.first);
-    }
-
-    HashPubKeys(computedTs, vecPublicKeyBytes);
+    HashPubKeys(computedTs, vecSorted.size(),
+                [&](size_t i) { return vecSorted[i].first.data(); });
 
     // Raise all signatures to power of the corresponding t's and aggregate the results into aggSig
     // Also accumulates aggregation info for each signature
@@ -257,7 +254,8 @@ bool CoreMPL::VerifySecure(const std::vector<G1Element>& vecPublicKeys,
         return std::memcmp(a.data(), b.data(), G1Element::SIZE) < 0;
     });
 
-    HashPubKeys(computedTs, vecSorted);
+    HashPubKeys(computedTs, vecSorted.size(),
+                [&](size_t i) { return vecSorted[i].data(); });
 
     G1Element publicKey;
     for (size_t i = 0; i < vecSorted.size(); ++i) {
