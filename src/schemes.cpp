@@ -241,11 +241,6 @@ bool CoreMPL::VerifySecure(const std::vector<G1Element>& vecPublicKeys,
                            const G2Element& signature,
                            const Bytes& message,
                            const bool fLegacy) {
-    bn_t one;
-    bn_new(one);
-    bn_zero(one);
-    bn_set_dig(one, 1);
-
     bn_t* computedTs = new bn_t[vecPublicKeys.size()];
     std::vector<std::array<uint8_t, G1Element::SIZE>> vecSorted(vecPublicKeys.size());
     for (size_t i = 0; i < vecPublicKeys.size(); i++) {
@@ -265,7 +260,6 @@ bool CoreMPL::VerifySecure(const std::vector<G1Element>& vecPublicKeys,
         publicKey = CoreMPL::Aggregate({publicKey, g1 * computedTs[i]});
     }
 
-    bn_free(one);
     for (size_t i = 0; i < vecPublicKeys.size(); i++) {
         bn_free(computedTs[i]);
     }
