@@ -16,6 +16,7 @@
 #include <array>
 #include <cstring>
 #include <set>
+#include <unordered_set>
 
 #include "bls.hpp"
 #include "elements.hpp"
@@ -399,9 +400,11 @@ bool BasicSchemeMPL::AggregateVerify(const vector<Bytes>& pubkeys,
     const auto arg_check = VerifyAggregateSignatureArguments(nPubKeys, messages.size(), G2Element::FromBytes(signature));
     if (arg_check != CONTINUE) return arg_check;
 
-    std::set<vector<uint8_t>> setMessages;
+    std::unordered_set<vector<uint8_t>> setMessages;
     for (const auto& message : messages) {
-        setMessages.insert({message.begin(), message.end()});
+        if (!setMessages.insert({message.begin(), message.end()}).second) {
+            return false;
+        }
     }
     if (setMessages.size() != nPubKeys) {
         return false;
@@ -419,7 +422,7 @@ bool BasicSchemeMPL::AggregateVerify(const vector<G1Element> &pubkeys,
         return arg_check;
     }
 
-    const std::set<vector<uint8_t>> setMessages(messages.begin(), messages.end());
+    const std::unordered_set<vector<uint8_t>> setMessages(messages.begin(), messages.end());
     if (setMessages.size() != nPubKeys) {
         return false;
     }
@@ -434,9 +437,11 @@ bool BasicSchemeMPL::AggregateVerify(const vector<G1Element>& pubkeys,
     const auto arg_check = VerifyAggregateSignatureArguments(nPubKeys, messages.size(), signature);
     if (arg_check != CONTINUE) return arg_check;
 
-    std::set<vector<uint8_t>> setMessages;
+    std::unordered_set<vector<uint8_t>> setMessages;
     for (const auto& message : messages) {
-        setMessages.insert({message.begin(), message.end()});
+        if (!setMessages.insert({message.begin(), message.end()}).second) {
+            return false;
+        }
     }
     if (setMessages.size() != nPubKeys) {
         return false;
