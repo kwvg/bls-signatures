@@ -15,6 +15,7 @@
 #ifndef SRC_BLSSCHEMES_HPP_
 #define SRC_BLSSCHEMES_HPP_
 
+#include <array>
 #include <iostream>
 #include <vector>
 
