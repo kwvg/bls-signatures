@@ -1194,6 +1194,49 @@ TEST_CASE("Schemes") {
             {pk1v, pk2v}, msg1, aggsigv_same));
     }
 
+    SECTION("Secure aggregation")
+    {
+        vector<uint8_t> seed1(32, 0x11);
+        vector<uint8_t> seed2(32, 0x22);
+        vector<uint8_t> seed3(32, 0x33);
+        Bytes message(vector<uint8_t>{7, 8, 9, 10});
+
+        BasicSchemeMPL basicScheme;
+        vector<PrivateKey> basicSk{
+            basicScheme.KeyGen(seed1),
+            basicScheme.KeyGen(seed2),
+            basicScheme.KeyGen(seed3)
+        };
+
+        vector<G1Element> basicPks;
+        vector<G2Element> basicSigs;
+        for (const auto& sk : basicSk) {
+            basicPks.push_back(basicScheme.SkToG1(sk));
+            basicSigs.push_back(basicScheme.Sign(sk, message));
+        }
+
+        G2Element basicSecureAggSig;
+        REQUIRE_NOTHROW(basicSecureAggSig = basicScheme.AggregateSecure(basicPks, basicSigs, message));
+        REQUIRE_NOTHROW(basicScheme.VerifySecure(basicPks, basicSecureAggSig, message));
+
+        LegacySchemeMPL legacyScheme;
+        vector<PrivateKey> legacySk{
+            legacyScheme.KeyGen(seed1),
+            legacyScheme.KeyGen(seed2),
+            legacyScheme.KeyGen(seed3)
+        };
+
+        vector<G1Element> legacyPks;
+        vector<G2Element> legacySigs;
+        for (const auto& sk : legacySk) {
+            legacyPks.push_back(legacyScheme.SkToG1(sk));
+            legacySigs.push_back(legacyScheme.Sign(sk, message));
+        }
+
+        G2Element legacySecureAggSig = legacyScheme.AggregateSecure(legacyPks, legacySigs, message);
+        REQUIRE_NOTHROW(legacyScheme.VerifySecure(legacyPks, legacySecureAggSig, message));
+    }
+
     SECTION("Legacy scheme") {
         // Test legacy example data defined in https://gist.github.com/xdustinface/318c2c08c36ab12a2b1963caf1f7815c
         std::string strSignHash{"b6d8ee31bbd375dfd55d5fb4b02cfccc68709e64f4c5ffcd3895ceb46540311d"};
