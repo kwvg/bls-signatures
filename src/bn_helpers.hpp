@@ -17,18 +17,21 @@ namespace bls {
 
 // RAII wrapper for dynamically allocated bn_t arrays.
 // Ensures bn_free + delete[] runs even when exceptions are thrown.
+// Tracks initialization count so partial construction cleans up correctly.
 struct BnArrayGuard {
     bn_t* data;
     size_t count;
+    size_t initialized{0};
 
     explicit BnArrayGuard(size_t n) : data(new bn_t[n]), count(n) {
         for (size_t i = 0; i < count; i++) {
             bn_new(data[i]);
+            initialized++;
         }
     }
 
     ~BnArrayGuard() {
-        for (size_t i = 0; i < count; i++) {
+        for (size_t i = 0; i < initialized; i++) {
             bn_free(data[i]);
         }
         delete[] data;
