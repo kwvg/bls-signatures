@@ -428,7 +428,19 @@ PYBIND11_MODULE(dashbls, m)
               return G1Element::FromBytesUnchecked({data_ptr, G1Element::SIZE});
             })
         .def("generator", &G1Element::Generator)
-        .def("from_message", py::overload_cast<const std::vector<uint8_t>&, const uint8_t*, int>(&G1Element::FromMessage), py::call_guard<py::gil_scoped_release>())
+        .def_static(
+            "from_message",
+            [](const py::bytes &msg, const py::bytes &dst) {
+                const auto msg_str = std::string(msg);
+                const auto dst_str = std::string(dst);
+                py::gil_scoped_release release;
+                return G1Element::FromMessage(
+                    Bytes((const uint8_t *)msg_str.c_str(), msg_str.size()),
+                    (const uint8_t *)dst_str.c_str(),
+                    (int)dst_str.size());
+            },
+            py::arg("msg"),
+            py::arg("dst"))
         .def("pair", &G1Element::Pair, py::call_guard<py::gil_scoped_release>())
         .def("negate", &G1Element::Negate, py::call_guard<py::gil_scoped_release>())
         .def("get_fingerprint", &G1Element::GetFingerprint, py::call_guard<py::gil_scoped_release>())
@@ -570,7 +582,19 @@ PYBIND11_MODULE(dashbls, m)
               return G2Element::FromBytesUnchecked({data_ptr, G2Element::SIZE});
             })
         .def("generator", &G2Element::Generator)
-        .def("from_message", py::overload_cast<const std::vector<uint8_t>&, const uint8_t*, int, bool>(&G2Element::FromMessage), py::call_guard<py::gil_scoped_release>())
+        .def_static(
+            "from_message",
+            [](const py::bytes &msg, const py::bytes &dst) {
+                const auto msg_str = std::string(msg);
+                const auto dst_str = std::string(dst);
+                py::gil_scoped_release release;
+                return G2Element::FromMessage(
+                    Bytes((const uint8_t *)msg_str.c_str(), msg_str.size()),
+                    (const uint8_t *)dst_str.c_str(),
+                    (int)dst_str.size());
+            },
+            py::arg("msg"),
+            py::arg("dst"))
         .def("pair", &G2Element::Pair, py::call_guard<py::gil_scoped_release>())
         .def("negate", &G2Element::Negate, py::call_guard<py::gil_scoped_release>())
         .def(
