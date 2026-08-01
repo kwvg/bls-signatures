@@ -2,7 +2,7 @@
 import time
 import secrets
 
-from blspy import (
+from dashbls import (
     AugSchemeMPL,
     G1Element,
     G2Element,
