@@ -60,6 +60,12 @@ class CMakeBuild(build_ext):
             "-DPYTHON_EXTENSION_SUFFIX=" + (sysconfig.get_config_var("EXT_SUFFIX") or ""),
         ]
 
+        try:
+            import pybind11
+            cmake_args.append("-Dpybind11_DIR=" + pybind11.get_cmake_dir())
+        except ImportError:
+            pass
+
         cfg = "Debug" if self.debug else "Release"
         build_args = ["--config", cfg]
 
