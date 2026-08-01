@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+# coding: latin-1
+
+#
+# Copyright (c) 2020-present, Chia Network Inc.
+# Copyright (c) 2026-present, The Dash Core developers
+# SPDX-License-Identifier: Apache-2.0
+# See the accompanying file LICENSE or https://opensource.org/licenses/Apache-2.0
+#
+
+"""Unit tests for the dashbls package."""
+
+import binascii
+
+import pytest
+from dashbls import (
+    AugSchemeMPL,
+    BasicSchemeMPL,
+    G1Element,
+    G2Element,
+    PopSchemeMPL,
+    PrivateKey,
+)
+
+# fmt: off
+SEED = bytes([
+    0, 50, 6, 244, 24, 199, 1, 25, 52, 88, 192, 19, 18, 12, 89, 6,
+    220, 18, 102, 58, 209, 82, 12, 62, 89, 110, 182, 9, 44, 20, 254, 22
+])
+# fmt: on
+MSG = bytes([100, 2, 254, 88, 90, 45, 23])
+MSG2 = bytes([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+SCHEMES = (BasicSchemeMPL, AugSchemeMPL, PopSchemeMPL)
+SCHEME_IDS = [scheme.__name__ for scheme in SCHEMES]
+
+
+def _derive_two_keypairs() -> tuple[PrivateKey, G1Element, PrivateKey, G1Element]:
+    seed1 = bytes([1]) + SEED[1:]
+    sk1 = BasicSchemeMPL.key_gen(seed1)
+    seed2 = bytes([2]) + seed1[1:]
+    sk2 = BasicSchemeMPL.key_gen(seed2)
+    return sk1, sk1.get_g1(), sk2, sk2.get_g1()
+
+
+@pytest.fixture
+def keypairs() -> tuple[PrivateKey, G1Element, PrivateKey, G1Element]:
+    return _derive_two_keypairs()
+
+
+def test_private_key_and_public_key_roundtrip() -> None:
+    sk = BasicSchemeMPL.key_gen(SEED)
+    pk = sk.get_g1()
+    assert sk == PrivateKey.from_bytes(bytes(sk))
+    assert pk == G1Element.from_bytes(bytes(pk))
+
+
+@pytest.mark.parametrize("scheme", SCHEMES, ids=SCHEME_IDS)
+def test_sign_and_verify_roundtrip(scheme: type) -> None:
+    sk = BasicSchemeMPL.key_gen(SEED)
+    pk = sk.get_g1()
+    sig = scheme.sign(sk, MSG)
+    assert sig == G2Element.from_bytes(bytes(sig))
+    assert scheme.verify(pk, MSG, sig)
+
+
+@pytest.mark.parametrize("scheme", SCHEMES, ids=SCHEME_IDS)
+def test_aggregate_verify_same_message(
+    scheme: type, keypairs: tuple[PrivateKey, G1Element, PrivateKey, G1Element]
+) -> None:
+    sk1, pk1, sk2, pk2 = keypairs
+    agg_pk = pk1 + pk2
+    if scheme is AugSchemeMPL:
+        sig1 = scheme.sign(sk1, MSG, agg_pk)
+        sig2 = scheme.sign(sk2, MSG, agg_pk)
+    else:
+        sig1 = scheme.sign(sk1, MSG)
+        sig2 = scheme.sign(sk2, MSG)
+    agg_sig = scheme.aggregate([sig1, sig2])
+    assert scheme.verify(agg_pk, MSG, agg_sig)
+
+
+@pytest.mark.parametrize("scheme", SCHEMES, ids=SCHEME_IDS)
+def test_aggregate_verify_different_messages(
+    scheme: type, keypairs: tuple[PrivateKey, G1Element, PrivateKey, G1Element]
+) -> None:
+    sk1, pk1, sk2, pk2 = keypairs
+    sig1 = scheme.sign(sk1, MSG)
+    sig2 = scheme.sign(sk2, MSG2)
+    agg_sig = scheme.aggregate([sig1, sig2])
+    assert scheme.aggregate_verify([pk1, pk2], [MSG, MSG2], agg_sig)
+
+
+@pytest.mark.parametrize("scheme", SCHEMES, ids=SCHEME_IDS)
+def test_manual_pairing_matches_aggregate_signature(
+    scheme: type, keypairs: tuple[PrivateKey, G1Element, PrivateKey, G1Element]
+) -> None:
+    sk1, pk1, sk2, pk2 = keypairs
+    sig1 = scheme.sign(sk1, MSG)
+    sig2 = scheme.sign(sk2, MSG2)
+    agg_sig = scheme.aggregate([sig1, sig2])
+
+    if scheme is AugSchemeMPL:
+        # AugSchemeMPL requires prepending the public key to the message
+        aug_msg1 = bytes(pk1) + MSG
+        aug_msg2 = bytes(pk2) + MSG2
+    else:
+        aug_msg1 = MSG
+        aug_msg2 = MSG2
+    pair1 = pk1.pair(scheme.g2_from_message(aug_msg1))
+    pair2 = pk2.pair(scheme.g2_from_message(aug_msg2))
+    pair = pair1 * pair2
+    agg_sig_pair = G1Element.generator().pair(agg_sig)
+    assert pair == agg_sig_pair
+
+
+@pytest.mark.parametrize("scheme", SCHEMES, ids=SCHEME_IDS)
+def test_hd_key_derivation_sign_and_verify(
+    scheme: type, keypairs: tuple[PrivateKey, G1Element, PrivateKey, G1Element]
+) -> None:
+    sk1, pk1, _sk2, _pk2 = keypairs
+    child = scheme.derive_child_sk(sk1, 123)
+    child_u = scheme.derive_child_sk_unhardened(sk1, 123)
+    child_u_pk = scheme.derive_child_pk_unhardened(pk1, 123)
+
+    sig_child = scheme.sign(child, MSG)
+    assert scheme.verify(child.get_g1(), MSG, sig_child)
+
+    sig_u_child = scheme.sign(child_u, MSG)
+    assert scheme.verify(child_u_pk, MSG, sig_u_child)
+
+
+# Invalid inputs from https://github.com/algorand/bls_sigs_ref/blob/master/python-impl/serdesZ.py
+INVALID_G1_VECTORS = [
+    # infinity points: too short
+    "c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    # infinity points: not all zeros
+    "c00000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000",
+    # bad tags
+    "3a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaaa",
+    "7a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaaa",
+    "fa0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaaa",
+    # wrong length for compresed point
+    "9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaa",
+    "9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaaaaa",
+    # invalid x-coord
+    "9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaaa",
+    # invalid elm of Fp --- equal to p (must be strictly less)
+    "9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
+]
+INVALID_G2_VECTORS = [
+    # infinity points: too short
+    "c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    # infinity points: not all zeros
+    "c00000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000",
+    # bad tags
+    "3a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaaa000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "7a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaaa000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "fa0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaaa000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    # wrong length for compressed point
+    "9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaaa0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaaa00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    # invalid x-coord
+    "9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaaa1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaa7",
+    # invalid elm of Fp --- equal to p (must be strictly less)
+    "9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "9a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaaa1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
+]
+
+
+@pytest.mark.parametrize("hex_str", INVALID_G1_VECTORS)
+def test_invalid_g1_vector_rejected(hex_str: str) -> None:
+    with pytest.raises(ValueError):
+        G1Element(binascii.unhexlify(hex_str))
+
+
+@pytest.mark.parametrize("hex_str", INVALID_G2_VECTORS)
+def test_invalid_g2_vector_rejected(hex_str: str) -> None:
+    with pytest.raises(ValueError):
+        G2Element(binascii.unhexlify(hex_str))
+
+
+# The following code was used to generate the reference vectors below
+"""
+from py_ecc.bls import (
+    G2Basic,
+    G2MessageAugmentation as G2MA,
+    G2ProofOfPossession as G2Pop,
+)
+
+secret1 = bytes([1] * 32)
+secret2 = bytes([x * 314159 % 256 for x in range(32)])
+sk1 = int.from_bytes(secret1, 'big')
+sk2 = int.from_bytes(secret2, 'big')
+msg = bytes([3, 1, 4, 1, 5, 9])
+pk1 = G2Basic.SkToPk(sk1)
+pk2 = G2Basic.SkToPk(sk2)
+
+for Scheme in (G2Basic, G2MA, G2Pop):
+    sig1 = Scheme.Sign(sk1, msg)
+    sig2 = Scheme.Sign(sk2, msg)
+    sig_agg = Scheme.Aggregate([sig1, sig2])
+    print(sig1)
+    print(sig2)
+    print(sig_agg)
+"""
+
+REFERENCE_VECTORS = {
+    BasicSchemeMPL: (
+        b"\x96\xba4\xfa\xc3<\x7f\x12\x9d`*\x0b\xc8\xa3\xd4?\x9a\xbc\x01N\xce\xaa\xb75\x91F\xb4\xb1P\xe5{\x80\x86Es\x8f5g\x1e\x9e\x10\xe0\xd8b\xa3\x0c\xabp\x07N\xb5\x83\x1d\x13\xe6\xa5\xb1b\xd0\x1e\xeb\xe6\x87\xd0\x16J\xdb\xd0\xa8d7\n|\"*'h\xd7pM\xa2T\xf1\xbf\x18#f[\xc26\x1f\x9d\xd8\xc0\x0e\x99",
+        b'\xa4\x02y\t2\x13\x0fvj\xf1\x1b\xa7\x16Sf\x83\xd8\xc4\xcf\xa5\x19G\xe4\xf9\x08\x1f\xed\xd6\x92\xd6\xdc\x0c\xac[\x90K\xee^\xa6\xe2Ui\xe3m{\xe4\xcaY\x06\x9a\x96\xe3K\x7fp\x07X\xb7\x16\xf9IJ\xaaY\xa9nt\xd1J;U*\x9ak\xc1)\xe7\x17\x19[\x9d`\x06\xfdm\\\xefGh\xc0"\xe0\xf71j\xbf',
+        b"\x98|\xfd;\xcdb(\x02\x87\x02t\x83\xf2\x9cU$^\xd81\xf5\x1d\xd6\xbd\x99\x9ao\xf1\xa1\xf1\xf1\xf0\xb6Gw\x8b\x01g5\x9cqPUX\xa7n\x15\x8ef\x18\x1e\xe5\x12Y\x05\xa6B$k\x01\xe7\xfa^\xe5=h\xa4\xfe\x9b\xfb)\xa8\xe2f\x01\xf0\xb9\xadW}\xdd\x18\x87js1|!n\xa6\x1fC\x04\x14\xecQ\xc5",
+    ),
+    AugSchemeMPL: (
+        b'\x81\x80\xf0,\xcbr\xe9"\xb1R\xfc\xed\xbe\x0e\x1d\x19R\x105Opp6X\xe8\xe0\x8c\xbe\xbf\x11\xd4\x97\x0e\xabj\xc3\xcc\xf7\x15\xf3\xfb\x87m\xf9\xa9yz\xbd\x0c\x1a\xf6\x1a\xae\xad\xc9,,\xfe\\\nV\xc1F\xcc\x8c?qQ\xa0s\xcf_\x16\xdf8$g$\xc4\xae\xd7?\xf3\x0e\xf5\xda\xa6\xaa\xca\xed\x1a&\xec\xaa3k',
+        b'\x99\x11\x1e\xea\xfbA-\xa6\x1eL7\xd3\xe8\x06\xc6\xfdj\xc9\xf3\x87\x0eT\xda\x92"\xbaNIH"\xc5\xb7eg1\xfazdY4\xd0KU\x9e\x92a\xb8b\x01\xbb\xeeW\x05RP\xa4Y\xa2\xda\x10\xe5\x1f\x9c\x1aiA)\x7f\xfc]\x97\nUr6\xd0\xbd\xeb|\xf8\xff\x18\x80\x0b\x08c8q\xa0\xf0\xa7\xeaB\xf4t\x80',
+        b"\x8c]\x03\xf9\xda\xe7~\x19\xa5\x94Z\x06\xa2\x14\x83n\xdb\x8e\x03\xb8QR]\x84\xb9\xded@\xe6\x8f\xc0\xcas\x03\xee\xed9\r\x86<\x9bU\xa8\xcfmY\x14\n\x01\xb5\x88G\x88\x1e\xb5\xafgsMD\xb2UVF\xc6al9\xab\x88\xd2S)\x9a\xcc\x1e\xb1\xb1\x9d\xdb\x9b\xfc\xbev\xe2\x8a\xdd\xf6q\xd1\x16\xc0R\xbb\x18G",
+    ),
+    PopSchemeMPL: (
+        b"\x95P\xfbN\x7f~\x8c\xc4\xa9\x0b\xe8V\n\xb5\xa7\x98\xb0\xb20\x00\xb6\xa5J!\x17R\x02\x10\xf9\x86\xf3\xf2\x81\xb3v\xf2Y\xc0\xb7\x80b\xd1\xeb1\x92\xb3\xd9\xbb\x04\x9fY\xec\xc1\xb0:pI\xebf^\r\xf3d\x94\xaeL\xb5\xf1\x13l\xca\xee\xfc\x99X\xcb0\xc33==C\xf0qH\xc3\x86)\x9a{\x1b\xfc\r\xc5\xcf|",
+        b"\xa6\x906\xbc\x11\xae^\xfc\xbfa\x80\xaf\xe3\x9a\xdd\xde~'s\x1e\xc4\x02W\xbf\xdc<7\xf1{\x8d\xf6\x83\x06\xa3N\xbd\x10\xe9\xe3*5%7P\xdf\\\x87\xc2\x14/\x82\x07\xe8\xd5eG\x12\xb4\xe5T\xf5\x85\xfbhF\xff8\x04\xe4)\xa9\xf8\xa1\xb4\xc5ku\xd0\x86\x9e\xd6u\x80\xd7\x89\x87\x0b\xab\xe2\xc7\xc8\xa9\xd5\x1e{*",
+        b"\xa4\xeat+\xcd\xc1U>\x9c\xa4\xe5`\xbe~^ln\xfajd\xdd\xdf\x9c\xa3\xbb(T#=\x85\xa6\xaa\xc1\xb7n\xc7\xd1\x03\xdbN3\x14\x8b\x82\xaf\x99#\xdb\x05\x93Jn\xce\x9aq\x01\xcd\x8a\x9dG\xce'\x97\x80V\xb0\xf5\x90\x00!\x81\x8cEi\x8a\xfd\xd6\xcf\x8ako\x7f\xee\x1f\x0bCqoU\xe4\x13\xd4\xb8z`9",
+    ),
+}
+
+
+@pytest.mark.parametrize("scheme", SCHEMES, ids=SCHEME_IDS)
+def test_sign_matches_reference_vectors(scheme: type) -> None:
+    secret1 = bytes([1] * 32)
+    secret2 = bytes([x * 314159 % 256 for x in range(32)])
+    sk1 = PrivateKey.from_bytes(secret1)
+    sk2 = PrivateKey.from_bytes(secret2)
+    msg = bytes([3, 1, 4, 1, 5, 9])
+
+    sig1 = scheme.sign(sk1, msg)
+    sig2 = scheme.sign(sk2, msg)
+    sig_agg = scheme.aggregate([sig1, sig2])
+
+    ref_sig1, ref_sig2, ref_sig_agg = REFERENCE_VECTORS[scheme]
+    assert bytes(sig1) == ref_sig1
+    assert bytes(sig2) == ref_sig2
+    assert bytes(sig_agg) == ref_sig_agg
+
+
+def test_readme() -> None:
+    seed: bytes = SEED
+    sk: PrivateKey = AugSchemeMPL.key_gen(seed)
+    pk: G1Element = sk.get_g1()
+
+    message: bytes = bytes([1, 2, 3, 4, 5])
+    signature: G2Element = AugSchemeMPL.sign(sk, message)
+
+    ok: bool = AugSchemeMPL.verify(pk, message, signature)
+    assert ok
+
+    sk_bytes: bytes = bytes(sk)  # 32 bytes
+    pk_bytes: bytes = bytes(pk)  # 48 bytes
+    signature_bytes: bytes = bytes(signature)  # 96 bytes
+
+    sk = PrivateKey.from_bytes(sk_bytes)
+    pk = G1Element.from_bytes(pk_bytes)
+    signature = G2Element.from_bytes(signature_bytes)
+
+    seed = bytes([1]) + seed[1:]
+    sk1: PrivateKey = AugSchemeMPL.key_gen(seed)
+    seed = bytes([2]) + seed[1:]
+    sk2: PrivateKey = AugSchemeMPL.key_gen(seed)
+    message2: bytes = bytes([1, 2, 3, 4, 5, 6, 7])
+
+    pk1: G1Element = sk1.get_g1()
+    sig1: G2Element = AugSchemeMPL.sign(sk1, message)
+
+    pk2: G1Element = sk2.get_g1()
+    sig2: G2Element = AugSchemeMPL.sign(sk2, message2)
+
+    agg_sig: G2Element = AugSchemeMPL.aggregate([sig1, sig2])
+
+    ok = AugSchemeMPL.aggregate_verify([pk1, pk2], [message, message2], agg_sig)
+    assert ok
+
+    seed = bytes([3]) + seed[1:]
+    sk3: PrivateKey = AugSchemeMPL.key_gen(seed)
+    pk3: G1Element = sk3.get_g1()
+    message3: bytes = bytes([100, 2, 254, 88, 90, 45, 23])
+    sig3: G2Element = AugSchemeMPL.sign(sk3, message3)
+
+    agg_sig_final: G2Element = AugSchemeMPL.aggregate([agg_sig, sig3])
+    ok = AugSchemeMPL.aggregate_verify(
+        [pk1, pk2, pk3], [message, message2, message3], agg_sig_final
+    )
+    assert ok
+
+    pop_sig1: G2Element = PopSchemeMPL.sign(sk1, message)
+    pop_sig2: G2Element = PopSchemeMPL.sign(sk2, message)
+    pop_sig3: G2Element = PopSchemeMPL.sign(sk3, message)
+    pop1: G2Element = PopSchemeMPL.pop_prove(sk1)
+    pop2: G2Element = PopSchemeMPL.pop_prove(sk2)
+    pop3: G2Element = PopSchemeMPL.pop_prove(sk3)
+
+    ok = PopSchemeMPL.pop_verify(pk1, pop1)
+    assert ok
+    ok = PopSchemeMPL.pop_verify(pk2, pop2)
+    assert ok
+    ok = PopSchemeMPL.pop_verify(pk3, pop3)
+    assert ok
+
+    pop_sig_agg: G2Element = PopSchemeMPL.aggregate([pop_sig1, pop_sig2, pop_sig3])
+
+    ok = PopSchemeMPL.fast_aggregate_verify([pk1, pk2, pk3], message, pop_sig_agg)
+    assert ok
+
+    pop_agg_pk: G1Element = pk1 + pk2 + pk3
+    ok = PopSchemeMPL.verify(pop_agg_pk, message, pop_sig_agg)
+    assert ok
+
+    pop_agg_sk: PrivateKey = PrivateKey.aggregate([sk1, sk2, sk3])
+    ok = PopSchemeMPL.sign(pop_agg_sk, message) == pop_sig_agg
+    assert ok
+
+    master_sk: PrivateKey = AugSchemeMPL.key_gen(seed)
+    child: PrivateKey = AugSchemeMPL.derive_child_sk(master_sk, 152)
+    _grandchild: PrivateKey = AugSchemeMPL.derive_child_sk(child, 952)
+
+    master_pk: G1Element = master_sk.get_g1()
+    child_u: PrivateKey = AugSchemeMPL.derive_child_sk_unhardened(master_sk, 22)
+    grandchild_u: PrivateKey = AugSchemeMPL.derive_child_sk_unhardened(child_u, 0)
+
+    child_u_pk: G1Element = AugSchemeMPL.derive_child_pk_unhardened(master_pk, 22)
+    grandchild_u_pk: G1Element = AugSchemeMPL.derive_child_pk_unhardened(child_u_pk, 0)
+
+    ok = grandchild_u_pk == grandchild_u.get_g1()
+    assert ok
+
+
+def test_aggregate_verify_zero_items() -> None:
+    assert AugSchemeMPL.aggregate_verify([], [], G2Element())
+
+
+def test_from_bytes_and_from_bytes_unchecked_agree_on_valid_point() -> None:
+    sk1 = BasicSchemeMPL.key_gen(b"1" * 32)
+    good_point_bytes = bytes(sk1.get_g1())
+    assert G1Element.from_bytes(good_point_bytes) == G1Element.from_bytes_unchecked(
+        good_point_bytes
+    )
+
+
+def test_from_bytes_rejects_invalid_g1_point() -> None:
+    bad_point_hex = "8d5d0fb73b9c92df4eab4216e48c3e358578b4cc30f82c268bd6fef3bd34b558628daf1afef798d4c3b0fcd8b28c8973"  # noqa: E501
+    with pytest.raises(ValueError):
+        G1Element.from_bytes(bytes.fromhex(bad_point_hex))
+    # from_bytes_unchecked skips subgroup validation and must not raise
+    G1Element.from_bytes_unchecked(bytes.fromhex(bad_point_hex))
+
+
+def test_from_bytes_rejects_invalid_g2_point() -> None:
+    bad_g2_point_hex = "8f2886c94eaeac335c8414cbf14c16681b225380cfee3293becc4531d5b415984b4ea4050d9ecda11fbc21c60627e9d212dfcb17d2b5ae399aa3fbcb099e05baa496b852ad976fb633cc6766b02fca4da549dc063908463b2906ad64e8b310ad"  # noqa: E501
+    with pytest.raises(ValueError):
+        G2Element.from_bytes(bytes.fromhex(bad_g2_point_hex))
