@@ -6,7 +6,7 @@ keywords = ["bls", "signatures", "bls12-381", "dash", "cryptography"]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dynamic = ["version"]
 
 [project.urls]
