@@ -4,10 +4,10 @@ import platform
 import re
 import subprocess
 import sys
-from distutils.version import LooseVersion
 
-from setuptools import Extension, setup, setuptools
+from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
+from setuptools.errors import CompileError
 
 
 class CMakeExtension(Extension):
@@ -115,8 +115,6 @@ ext_modules = [
 ]
 
 
-# As of Python 3.6, CCompiler has a `has_flag` method.
-# cf http://bugs.python.org/issue26689
 def has_flag(compiler, flagname):
     """Return a boolean indicating whether a flag name is supported on
     the specified compiler.
@@ -127,7 +125,7 @@ def has_flag(compiler, flagname):
         f.write("int main (int argc, char **argv) { return 0; }")
         try:
             compiler.compile([f.name], extra_postargs=[flagname])
-        except setuptools.distutils.errors.CompileError:
+        except CompileError:
             return False
     return True
 
@@ -173,11 +171,7 @@ class BuildExt(build_ext):
             if has_flag(self.compiler, "-fvisibility=hidden"):
                 opts.append("-fvisibility=hidden")
         elif ct == "msvc":
-            if sys.version_info < (3, 9):
-                ver_flag = '/DVERSION_INFO=\"%s\"'
-            else:
-                ver_flag = '-DVERSION_INFO="%s"'
-            opts.append(ver_flag % self.distribution.get_version())
+            opts.append('-DVERSION_INFO="%s"' % self.distribution.get_version())
         for ext in self.extensions:
             ext.extra_compile_args = opts
             ext.extra_link_args = link_opts
