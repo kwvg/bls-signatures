@@ -90,7 +90,7 @@ class get_pybind_include(object):
 
 ext_modules = [
     Extension(
-        "blspy",
+        "dashbls",
         [
             "src/elements.cpp",
             "src/schemes.cpp",
@@ -188,13 +188,13 @@ class BuildExt(build_ext):
 
 if platform.system() == "Windows":
     setup(
-        name="blspy",
-        author="Mariano Sorgente",
-        author_email="mariano@chia.net",
-        description="BLS signatures in c++ (with python bindings)",
+        name="dashbls",
+        author="The Dash Core developers",
+        author_email="contact@dash.org",
+        description="Python 3.x binds for Dash's bls-signatures",
         long_description=open("README.md").read(),
         long_description_content_type="text/markdown",
-        url="https://github.com/Chia-Network/bls-signatures",
+        url="https://github.com/dashpay/bls-signatures",
         python_requires=">=3.7",
         setup_requires=["pybind11>=2.10.0"],
         install_requires=["pybind11>=2.10.0"],
@@ -204,16 +204,16 @@ if platform.system() == "Windows":
     )
 else:
     setup(
-        name="blspy",
-        author="Mariano Sorgente",
-        author_email="mariano@chia.net",
-        description="BLS signatures in c++ (python bindings)",
+        name="dashbls",
+        author="The Dash Core developers",
+        author_email="contact@dash.org",
+        description="Python 3.x binds for Dash's bls-signatures",
         python_requires=">=3.7",
         install_requires=["wheel"],
         long_description=open("README.md").read(),
         long_description_content_type="text/markdown",
-        url="https://github.com/Chia-Network/bls-signatures",
-        ext_modules=[CMakeExtension("blspy", ".")],
+        url="https://github.com/dashpay/bls-signatures",
+        ext_modules=[CMakeExtension("dashbls", ".")],
         cmdclass=dict(build_ext=CMakeBuild),
         zip_safe=False,
     )

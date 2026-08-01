@@ -36,7 +36,7 @@ inline int PyLong_AsByteArray(PyLongObject* obj, uint8_t* buf, Py_ssize_t size, 
 }
 } // anonymous namespace
 
-PYBIND11_MODULE(blspy, m)
+PYBIND11_MODULE(dashbls, m)
 {
     py::class_<PrivateKey>(m, "PrivateKey")
         .def_property_readonly_static(
