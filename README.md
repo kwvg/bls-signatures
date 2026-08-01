@@ -12,7 +12,7 @@
 
 `bls-signatures` is a cross-platform library implementing BLS12-381 primitives for Dash built on
 the [`relic`](https://github.com/relic-toolkit/relic) toolkit with bindings available in
-[Python](./python-bindings), [Rust](./rust-bindings/), [Go](./go-bindings/) and [Javascript](./js-bindings).
+[Python](./binds/python), [Rust](./rust-bindings/), [Go](./go-bindings/) and [Javascript](./js-bindings).
 
 ## Dependencies
 
