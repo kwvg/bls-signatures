@@ -286,6 +286,24 @@ def test_aggregate_verify_zero_items() -> None:
     assert AugSchemeMPL.aggregate_verify([], [], G2Element())
 
 
+G1_DST = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_"
+G2_DST = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_"
+
+
+def test_from_message() -> None:
+    msg = bytes([10]) * 32
+    assert G2Element.from_message(msg, G2_DST) == BasicSchemeMPL.g2_from_message(msg)
+    assert G1Element.from_message(msg, G1_DST) != G1Element()
+
+
+def test_from_message_is_domain_separated() -> None:
+    # The tag is what keeps hashes for one scheme from colliding with another's,
+    # so a different tag over the same message must land somewhere else.
+    msg = bytes([10]) * 32
+    assert G2Element.from_message(msg, G2_DST) != G2Element.from_message(msg, G1_DST)
+    assert G1Element.from_message(msg, G1_DST) != G1Element.from_message(msg, G2_DST)
+
+
 def test_from_bytes_and_from_bytes_unchecked_agree_on_valid_point() -> None:
     sk1 = BasicSchemeMPL.key_gen(b"1" * 32)
     good_point_bytes = bytes(sk1.get_g1())
