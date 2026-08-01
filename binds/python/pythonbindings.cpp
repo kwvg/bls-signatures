@@ -449,16 +449,16 @@ PYBIND11_MODULE(dashbls, m)
             py::is_operator())
         .def(
             "__mul__",
-            [](G1Element &self, bn_t other) {
+            [](G1Element &self, const PrivateKey &other) {
                 py::gil_scoped_release release;
-                return self * (*(bn_t *)&other);
+                return self * other;
             },
             py::is_operator())
         .def(
             "__rmul__",
-            [](G1Element &self, bn_t other) {
+            [](G1Element &self, const PrivateKey &other) {
                 py::gil_scoped_release release;
-                return self * (*(bn_t *)&other);
+                return other * self;
             },
             py::is_operator())
         .def(
@@ -590,16 +590,16 @@ PYBIND11_MODULE(dashbls, m)
             py::is_operator())
         .def(
             "__mul__",
-            [](G2Element &self, bn_t other) {
+            [](G2Element &self, const PrivateKey &other) {
                 py::gil_scoped_release release;
-                return self * (*(bn_t *)&other);
+                return self * other;
             },
             py::is_operator())
         .def(
             "__rmul__",
-            [](G2Element &self, bn_t other) {
+            [](G2Element &self, const PrivateKey &other) {
                 py::gil_scoped_release release;
-                return self * (*(bn_t *)&other);
+                return other * self;
             },
             py::is_operator())
 

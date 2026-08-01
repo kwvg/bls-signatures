@@ -56,6 +56,27 @@ def test_private_key_and_public_key_roundtrip() -> None:
     assert pk == G1Element.from_bytes(bytes(pk))
 
 
+def test_scalar_multiplication_by_private_key() -> None:
+    # These operators used to take `bn_t`, which pybind11 has no caster for, so
+    # every call raised TypeError regardless of argument. Guard the binding.
+    sk = BasicSchemeMPL.key_gen(SEED)
+    g1 = G1Element.generator()
+    assert g1 * sk == sk.get_g1()
+    assert sk * g1 == sk.get_g1()
+
+    g2 = G2Element.generator()
+    assert g2 * sk == sk * g2
+    assert g2 * sk != G2Element()
+
+
+def test_scalar_multiplication_is_additive(
+    keypairs: tuple[PrivateKey, G1Element, PrivateKey, G1Element],
+) -> None:
+    sk1, _pk1, sk2, _pk2 = keypairs
+    g1 = G1Element.generator()
+    assert (g1 * sk1) + (g1 * sk2) == g1 * PrivateKey.aggregate([sk1, sk2])
+
+
 @pytest.mark.parametrize("scheme", SCHEMES, ids=SCHEME_IDS)
 def test_sign_and_verify_roundtrip(scheme: type) -> None:
     sk = BasicSchemeMPL.key_gen(SEED)
