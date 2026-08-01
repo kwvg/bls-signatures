@@ -10,7 +10,7 @@ FetchContent_MakeAvailable(pybind11)
 include_directories(
         ${INCLUDE_DIRECTORIES}
         ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/../include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
 pybind11_add_module(blspy ${CMAKE_CURRENT_SOURCE_DIR}/pythonbindings.cpp)

@@ -96,7 +96,7 @@ ext_modules = [
             "src/schemes.cpp",
             "src/privatekey.cpp",
             "src/bls.cpp",
-            "python-bindings/pythonbindings.cpp",
+            "binds/python/pythonbindings.cpp",
         ],
         include_dirs=[
             # Path to pybind11 headers
