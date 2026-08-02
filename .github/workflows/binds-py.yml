@@ -69,3 +69,88 @@ jobs:
       env:
         CIBW_ARCHS: ${{ matrix.archs }}
         MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos-target }}
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheels-${{ matrix.name }}
+        path: wheelhouse/*.whl
+        if-no-files-found: error
+
+  sdist:
+    name: Build (sdist), Python
+    needs: lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        # Must be synced with .python-version
+        python-version: '3.10'
+
+    - name: Build the sdist
+      run: uv build --sdist --out-dir dist
+
+    - name: Prepare build system
+      run: |
+        sudo apt-get update
+        sudo apt-get install -qq --yes libgmp-dev
+
+    - name: Install from the sdist and run the unit tests
+      run: |
+        uv venv .venv-sdist
+        uv pip install --python .venv-sdist --no-binary=dashbls dist/*.tar.gz
+        uv pip install --python .venv-sdist pytest pytest-benchmark
+        .venv-sdist/bin/python -m pytest --import-mode=importlib -v binds/python/test_unit.py
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sdist
+        path: dist/*.tar.gz
+        if-no-files-found: error
+
+  publish:
+    name: Publish (releases), Python
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build, sdist]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: wheels-*
+        merge-multiple: true
+        path: dist
+
+    - name: Download the sdist
+      uses: actions/download-artifact@v4
+      with:
+        name: sdist
+        path: dist
+
+    - name: Attach the wheels and sdist to the release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        ls -l dist
+        gh release upload "${{ github.ref_name }}" dist/*.whl dist/*.tar.gz --clobber
+
+  index:
+    name: Publish (index), Python
+    needs: publish
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/build-docs.yml

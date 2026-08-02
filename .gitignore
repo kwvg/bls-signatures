@@ -177,3 +177,6 @@ tempCodeRunnerFile.py
 
 # PyPI configuration file
 .pypirc
+
+# PEP503 index
+_site
