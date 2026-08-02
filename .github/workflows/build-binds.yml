@@ -29,3 +29,7 @@ jobs:
   build-rs:
     name: Rust
     uses: ./.github/workflows/binds-rs.yml
+
+  build-py:
+    name: Python
+    uses: ./.github/workflows/binds-py.yml
