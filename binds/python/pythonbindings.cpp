@@ -16,6 +16,9 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <stdexcept>
+#include <string>
+
 #include <dashbls/bls.hpp>
 #include <dashbls/elements.hpp>
 #include <dashbls/hdkeys.hpp>
@@ -33,6 +36,19 @@ inline int PyLong_AsByteArray(PyLongObject* obj, uint8_t* buf, Py_ssize_t size, 
                                , /*with_exceptions=*/true
 #endif // PY_VERSION_HEX >= 0x030d0000
     );
+}
+
+// md_xmd caps a tag at 255 bytes but compares signed, so a tag at or beyond 2 GiB
+// truncates negative, slips the guard and is widened back to a huge length.
+std::string CopyDst(const py::bytes &dst, const char *who)
+{
+    std::string s(dst);
+    if (s.size() > 255) {
+        throw std::invalid_argument(
+            std::string(who) + ": domain separation tag must be at most 255 bytes, got " +
+            std::to_string(s.size()));
+    }
+    return s;
 }
 } // anonymous namespace
 
@@ -432,7 +448,7 @@ PYBIND11_MODULE(dashbls, m)
             "from_message",
             [](const py::bytes &msg, const py::bytes &dst) {
                 const auto msg_str = std::string(msg);
-                const auto dst_str = std::string(dst);
+                const auto dst_str = CopyDst(dst, "G1Element.from_message");
                 py::gil_scoped_release release;
                 return G1Element::FromMessage(
                     Bytes((const uint8_t *)msg_str.c_str(), msg_str.size()),
@@ -586,7 +602,7 @@ PYBIND11_MODULE(dashbls, m)
             "from_message",
             [](const py::bytes &msg, const py::bytes &dst) {
                 const auto msg_str = std::string(msg);
-                const auto dst_str = std::string(dst);
+                const auto dst_str = CopyDst(dst, "G2Element.from_message");
                 py::gil_scoped_release release;
                 return G2Element::FromMessage(
                     Bytes((const uint8_t *)msg_str.c_str(), msg_str.size()),

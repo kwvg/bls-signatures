@@ -304,6 +304,19 @@ def test_from_message_is_domain_separated() -> None:
     assert G1Element.from_message(msg, G1_DST) != G1Element.from_message(msg, G2_DST)
 
 
+@pytest.mark.parametrize("element", [G1Element, G2Element])
+@pytest.mark.parametrize("size", [256, 1000])
+def test_from_message_rejects_oversized_dst(element: type, size: int) -> None:
+    # md_xmd caps the tag at 255 bytes but compares signed, so reject the length
+    # here rather than letting it reach relic
+    with pytest.raises(ValueError):
+        element.from_message(bytes([10]) * 32, b"x" * size)
+
+
+def test_from_message_accepts_maximum_dst() -> None:
+    assert G2Element.from_message(bytes([10]) * 32, b"x" * 255) != G2Element()
+
+
 def test_from_bytes_and_from_bytes_unchecked_agree_on_valid_point() -> None:
     sk1 = BasicSchemeMPL.key_gen(b"1" * 32)
     good_point_bytes = bytes(sk1.get_g1())
