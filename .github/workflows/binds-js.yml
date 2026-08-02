@@ -1,0 +1,33 @@
+name: Binds (Javascript)
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }}, Javascript
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04-arm]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Install Emscripten SDK
+      uses: mymindstorm/setup-emsdk@v16
+
+    - name: Build JavaScript bindings
+      run: |
+        emcc -v
+        sh emsdk_build.sh
+
+    - name: Test JavaScript bindings
+      run: |
+        sh js_test.sh
