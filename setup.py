@@ -1,37 +1,53 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
+# coding: latin-1
+
+#
+# Copyright (c) 2020-present, Chia Network Inc.
+# Copyright (c) 2026-present, The Dash Core developers
+# SPDX-License-Identifier: Apache-2.0
+# See the accompanying file LICENSE or https://opensource.org/licenses/Apache-2.0
+#
+
+"""Build configuration for the dashbls package."""
+
 import os
 import platform
 import re
 import subprocess
 import sys
+import sysconfig
 
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
-from setuptools.errors import CompileError
 
 
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir=""):
-        Extension.__init__(self, name, sources=["./"])
+        super().__init__(name, sources=[])
         self.sourcedir = os.path.abspath(sourcedir)
 
 
 class CMakeBuild(build_ext):
+    CMAKE_MINIMUM = (3, 18, 0)
+
     def run(self):
         try:
-            out = subprocess.check_output(["cmake", "--version"])
+            out = subprocess.check_output(["cmake", "--version"]).decode()
         except OSError:
+            raise RuntimeError("CMake must be installed to build dashbls")
+        found = re.search(r"version\s*([\d.]+)", out)
+        if found is None:
+            raise RuntimeError("cannot read a version out of: " + out.strip())
+        parts = [int(part) for part in found.group(1).split(".")[:3] if part]
+        while len(parts) < len(self.CMAKE_MINIMUM):
+            parts.append(0)
+        version = tuple(parts)
+        if version < self.CMAKE_MINIMUM:
             raise RuntimeError(
-                "CMake must be installed to build"
-                + " the following extensions: "
-                + ", ".join(e.name for e in self.extensions)
+                "CMake >= {} is required, found {}".format(
+                    ".".join(str(p) for p in self.CMAKE_MINIMUM), found.group(1)
+                )
             )
-
-        version_str = re.search(r"version\s*([\d.]+)", out.decode()).group(1)
-        cmake_version = tuple(int(part) for part in version_str.split("."))
-        if cmake_version < (3, 18, 0):
-            raise RuntimeError("CMake >= 3.18.0 is required")
-
         for ext in self.extensions:
             self.build_extension(ext)
 
@@ -39,7 +55,9 @@ class CMakeBuild(build_ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
         cmake_args = [
             "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir,
+            "-DMULTI=",
             "-DPYTHON_EXECUTABLE=" + sys.executable,
+            "-DPYTHON_EXTENSION_SUFFIX=" + (sysconfig.get_config_var("EXT_SUFFIX") or ""),
         ]
 
         cfg = "Debug" if self.debug else "Release"
@@ -70,124 +88,8 @@ class CMakeBuild(build_ext):
         )
 
 
-class get_pybind_include(object):
-    """Helper class to determine the pybind11 include path
-
-    The purpose of this class is to postpone importing pybind11
-    until it is actually installed, so that the ``get_include()``
-    method can be invoked."""
-
-    def __init__(self, user=False):
-        self.user = user
-
-    def __str__(self):
-        import pybind11
-
-        return pybind11.get_include(self.user)
-
-
-ext_modules = [
-    Extension(
-        "dashbls",
-        [
-            "src/elements.cpp",
-            "src/schemes.cpp",
-            "src/privatekey.cpp",
-            "src/bls.cpp",
-            "binds/python/pythonbindings.cpp",
-        ],
-        include_dirs=[
-            # Path to pybind11 headers
-            get_pybind_include(),
-            get_pybind_include(user=True),
-            "relic_ietf_64/include",
-            "mpir_gc_x64",
-            "libsodium/include",
-        ],
-        library_dirs=[
-            "relic_ietf_64",
-            "mpir_gc_x64",
-            "libsodium/x64/Release/v142/static",
-        ],
-        libraries=["relic_s", "Advapi32", "mpir", "libsodium"],
-        language="c++",
-    ),
-]
-
-
-def has_flag(compiler, flagname):
-    """Return a boolean indicating whether a flag name is supported on
-    the specified compiler.
-    """
-    import tempfile
-
-    with tempfile.NamedTemporaryFile("w", suffix=".cpp") as f:
-        f.write("int main (int argc, char **argv) { return 0; }")
-        try:
-            compiler.compile([f.name], extra_postargs=[flagname])
-        except CompileError:
-            return False
-    return True
-
-
-def cpp_flag(compiler):
-    """Return the -std=c++[11/14/17] compiler flag.
-
-    The newer version is prefered over c++11 (when it is available).
-    """
-    flags = ["-std=c++17", "-std=c++14", "-std=c++11"]
-
-    for flag in flags:
-        if has_flag(compiler, flag):
-            return flag
-
-    raise RuntimeError("Unsupported compiler -- at least C++11 support " "is needed!")
-
-
-class BuildExt(build_ext):
-    """A custom build extension for adding compiler-specific options."""
-
-    c_opts = {
-        "msvc": ["/EHsc", "/std:c++17", "/DBLSALLOC_SODIUM=1", "/DSODIUM_STATIC"],
-        "unix": [],
-    }
-    l_opts = {
-        "msvc": [],
-        "unix": [],
-    }
-
-    if sys.platform == "darwin":
-        darwin_opts = ["-stdlib=libc++", "-mmacosx-version-min=10.14"]
-        c_opts["unix"] += darwin_opts
-        l_opts["unix"] += darwin_opts
-
-    def build_extensions(self):
-        ct = self.compiler.compiler_type
-        opts = self.c_opts.get(ct, [])
-        link_opts = self.l_opts.get(ct, [])
-        if ct == "unix":
-            opts.append('-DVERSION_INFO="%s"' % self.distribution.get_version())
-            opts.append(cpp_flag(self.compiler))
-            if has_flag(self.compiler, "-fvisibility=hidden"):
-                opts.append("-fvisibility=hidden")
-        elif ct == "msvc":
-            opts.append('-DVERSION_INFO="%s"' % self.distribution.get_version())
-        for ext in self.extensions:
-            ext.extra_compile_args = opts
-            ext.extra_link_args = link_opts
-        build_ext.build_extensions(self)
-
-
-if platform.system() == "Windows":
-    setup(
-        setup_requires=["pybind11>=2.10.0"],
-        ext_modules=ext_modules,
-        cmdclass={"build_ext": BuildExt},
-        zip_safe=False,
-    )
-else:
-    setup(
-        ext_modules=[CMakeExtension("dashbls", ".")],
-        cmdclass=dict(build_ext=CMakeBuild),
-        zip_safe=False,
-    )
+setup(
+    ext_modules=[CMakeExtension("dashbls", ".")],
+    cmdclass=dict(build_ext=CMakeBuild),
+    zip_safe=False,
+)
