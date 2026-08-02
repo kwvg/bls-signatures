@@ -17,27 +17,18 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.os }}, Python ${{ matrix.python }}, Go ${{ matrix.golang }}, Rust ${{ matrix.rust }}
+    name: ${{ matrix.os }}, Go ${{ matrix.golang }}, Rust ${{ matrix.rust }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest]
         golang: [ '1.24' ]
-        python: ['3.10', '3.11', '3.12', '3.13']
         rust: [ '1.91.0' ]
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-
-    - uses: chia-network/actions/setup-python@main
-      with:
-        python-version: ${{ matrix.python }}
-
-    - name: Test Python implementation
-      run: |
-        python python-impl/impl-test.py
 
     - name: Install Emscripten SDK
       uses: mymindstorm/setup-emsdk@v11
