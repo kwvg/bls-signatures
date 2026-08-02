@@ -54,6 +54,8 @@ class CMakeBuild(build_ext):
     def build_extension(self, ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
         cmake_args = [
+            "-DBUILD_BLS_BENCHMARKS=OFF",
+            "-DBUILD_BLS_TESTS=OFF",
             "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir,
             "-DMULTI=",
             "-DPYTHON_EXECUTABLE=" + sys.executable,
@@ -67,7 +69,7 @@ class CMakeBuild(build_ext):
             pass
 
         cfg = "Debug" if self.debug else "Release"
-        build_args = ["--config", cfg]
+        build_args = ["--config", cfg, "--parallel", str(os.cpu_count() or 1)]
 
         if sys.platform == "win32":
             target = sysconfig.get_platform()
@@ -85,14 +87,12 @@ class CMakeBuild(build_ext):
                 cmake_args += ["-DCMAKE_BUILD_TYPE=" + cfg]
         else:
             cmake_args += ["-DCMAKE_BUILD_TYPE=" + cfg]
-            build_args += ["--", "-j", "6"]
 
         env = os.environ.copy()
         env["CXXFLAGS"] = '{} -DVERSION_INFO=\\"{}\\"'.format(
             env.get("CXXFLAGS", ""), self.distribution.get_version()
         )
-        if not os.path.exists(self.build_temp):
-            os.makedirs(self.build_temp)
+        os.makedirs(self.build_temp, exist_ok=True)
         subprocess.check_call(
             ["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env
         )
