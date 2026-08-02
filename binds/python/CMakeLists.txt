@@ -18,3 +18,7 @@ target_include_directories(dashbls_py PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 target_link_libraries(dashbls_py PRIVATE dashbls)
+
+if(VERSION_INFO)
+  target_compile_definitions(dashbls_py PRIVATE VERSION_INFO="${VERSION_INFO}")
+endif()
