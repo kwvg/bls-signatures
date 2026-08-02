@@ -75,6 +75,7 @@ class CMakeBuild(build_ext):
             "-DMULTI=",
             "-DPYBIND11_FINDPYTHON=ON",
             "-DPython_EXECUTABLE=" + sys.executable,
+            "-DVERSION_INFO=" + self.distribution.get_version(),
         ]
 
         try:
