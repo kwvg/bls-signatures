@@ -12,6 +12,7 @@
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -77,6 +78,8 @@ class CMakeBuild(build_ext):
             "-DPython_EXECUTABLE=" + sys.executable,
             "-DVERSION_INFO=" + self.distribution.get_version(),
         ]
+
+        cmake_args += shlex.split(os.environ.get("CMAKE_ARGS", ""))
 
         try:
             import pybind11
