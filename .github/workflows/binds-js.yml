@@ -26,6 +26,12 @@ jobs:
       with:
         persist-credentials: false
 
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+
     - name: Install Emscripten SDK
       uses: mymindstorm/setup-emsdk@v16
 
