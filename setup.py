@@ -12,6 +12,7 @@
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import sysconfig
@@ -21,20 +22,33 @@ from setuptools.command.build_ext import build_ext
 
 
 class CMakeExtension(Extension):
-    def __init__(self, name, sourcedir=""):
+    def __init__(self, name: str, sourcedir: str = "") -> None:
         super().__init__(name, sources=[])
         self.sourcedir = os.path.abspath(sourcedir)
 
 
 class CMakeBuild(build_ext):
     CMAKE_MINIMUM = (3, 18, 0)
-    WINDOWS_GENERATOR_ARCH = {"win-amd64": "x64", "win-arm64": "ARM64", "win32": "Win32"}
+    WINDOWS_GENERATOR_ARCH = (
+        ("win-amd64", "x64"),
+        ("win-arm64", "ARM64"),
+        ("win32", "Win32"),
+    )
 
-    def run(self):
-        try:
-            out = subprocess.check_output(["cmake", "--version"]).decode()
-        except OSError:
+    def _cmake(self) -> str:
+        cmake = shutil.which("cmake")
+        if cmake is None:
             raise RuntimeError("CMake must be installed to build dashbls")
+        return cmake
+
+    def run(self) -> None:
+        cmake = self._cmake()
+        try:
+            out = subprocess.check_output(  # noqa: S603
+                [cmake, "--version"], encoding="utf-8", errors="replace"
+            )
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise RuntimeError("cannot run cmake --version") from error
         found = re.search(r"version\s*([\d.]+)", out)
         if found is None:
             raise RuntimeError("cannot read a version out of: " + out.strip())
@@ -45,40 +59,40 @@ class CMakeBuild(build_ext):
         if version < self.CMAKE_MINIMUM:
             raise RuntimeError(
                 "CMake >= {} is required, found {}".format(
-                    ".".join(str(p) for p in self.CMAKE_MINIMUM), found.group(1)
+                    ".".join(str(p) for p in self.CMAKE_MINIMUM),
+                    found.group(1),
                 )
             )
         for ext in self.extensions:
             self.build_extension(ext)
 
-    def build_extension(self, ext):
+    def build_extension(self, ext: CMakeExtension) -> None:
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
         cmake_args = [
             "-DBUILD_BLS_BENCHMARKS=OFF",
             "-DBUILD_BLS_TESTS=OFF",
             "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir,
             "-DMULTI=",
-            "-DPYTHON_EXECUTABLE=" + sys.executable,
-            "-DPYTHON_EXTENSION_SUFFIX=" + (sysconfig.get_config_var("EXT_SUFFIX") or ""),
+            "-DPYBIND11_FINDPYTHON=ON",
+            "-DPython_EXECUTABLE=" + sys.executable,
         ]
 
         try:
             import pybind11
-            cmake_args.append("-Dpybind11_DIR=" + pybind11.get_cmake_dir())
         except ImportError:
             pass
+        else:
+            cmake_args.append("-Dpybind11_DIR=" + pybind11.get_cmake_dir())
 
         cfg = "Debug" if self.debug else "Release"
         build_args = ["--config", cfg, "--parallel", str(os.cpu_count() or 1)]
 
         if sys.platform == "win32":
             target = sysconfig.get_platform()
-            arch = self.WINDOWS_GENERATOR_ARCH.get(target)
+            arch = dict(self.WINDOWS_GENERATOR_ARCH).get(target)
             if arch is None:
                 raise RuntimeError("unsupported windows platform: " + target)
-            cmake_args.append(
-                "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}".format(cfg.upper(), extdir)
-            )
+            cmake_args.append(f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{cfg.upper()}={extdir}")
             generator = os.environ.get("CMAKE_GENERATOR", "Visual Studio")
             if generator.startswith("Visual Studio"):
                 cmake_args += ["-A", arch]
@@ -88,21 +102,21 @@ class CMakeBuild(build_ext):
         else:
             cmake_args += ["-DCMAKE_BUILD_TYPE=" + cfg]
 
-        env = os.environ.copy()
-        env["CXXFLAGS"] = '{} -DVERSION_INFO=\\"{}\\"'.format(
-            env.get("CXXFLAGS", ""), self.distribution.get_version()
-        )
         os.makedirs(self.build_temp, exist_ok=True)
-        subprocess.check_call(
-            ["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env
+        cmake = self._cmake()
+        subprocess.check_call(  # noqa: S603
+            [cmake, ext.sourcedir, *cmake_args], cwd=self.build_temp
         )
-        subprocess.check_call(
-            ["cmake", "--build", "."] + build_args, cwd=self.build_temp
+        subprocess.check_call(  # noqa: S603
+            [cmake, "--build", ".", *build_args], cwd=self.build_temp
         )
 
 
 setup(
-    ext_modules=[CMakeExtension("dashbls", ".")],
+    package_dir={"": "binds/python"},
+    packages=[],
+    py_modules=[],
+    ext_modules=[CMakeExtension("dashbls", os.path.dirname(os.path.abspath(__file__)))],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
 )

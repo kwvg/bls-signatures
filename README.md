@@ -28,6 +28,10 @@ Additionally, the following dependencies are supplied by the codebase
 
 ## Build library
 
+> [!NOTE]
+> Multi-config generators (like Visual Studio) place the binaries under a per-configuration directory, so on Windows the
+> executables are at `src\Release\runtest.exe` and `src\Release\runbench.exe`.
+
 ```sh
 # Create scratchpad directory
 mkdir build && cd build
@@ -45,6 +49,39 @@ cmake --build . --parallel 4
 ./src/runbench
 ```
 
+## Build Python binds
+
+Our Python binds target Python 3.10 or higher; they depend on
+
+* [`pybind11`](https://github.com/pybind/pybind11) (bridging C++ and Python)
+* [`ruff`](https://github.com/astral-sh/ruff) (linting, part of optional `[.dev]` dependency group)
+
+> [!NOTE]
+> We recommend using programs like [`uv`](https://github.com/astral-sh/uv) to manage your virtualenv (`venv`) to prevent
+> cross-contamination with Python-based native packages or other Python projects.
+
+```sh
+# Create a new venv named dashbls
+uv venv dashbls
+
+# Enter venv
+source dashbls/bin/activate
+
+# Install developer dependencies
+uv pip install -e ".[dev]"
+
+# Build binds
+uv build
+
+# Run linter and formatter
+uv run ruff check
+uv run ruff format --check
+
+# Run unit tests
+uv run python binds/python/test.py
+
+# Run benchmarks
+uv run python binds/python/benchmark.py
 ```
 
 ## License

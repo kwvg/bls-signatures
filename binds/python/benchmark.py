@@ -1,6 +1,6 @@
-# flake8: noqa: E501
-import time
 import secrets
+import sys
+import time
 
 from dashbls import (
     AugSchemeMPL,
@@ -9,18 +9,23 @@ from dashbls import (
     PrivateKey,
 )
 
-def startStopwatch():
+
+def startStopwatch() -> float:
     return time.perf_counter()
 
-def endStopwatch(test_name, start, numIters):
+
+def endStopwatch(test_name: str, start: float, numIters: int) -> None:
     end_time = time.perf_counter()
 
     duration = end_time - start
 
-    print("\n%s\nTotal: %d runs in %0.1f ms\nAvg: %f"
-        % (test_name, numIters, duration * 1000, duration * 1000 / numIters))
+    print(
+        f"\n{test_name}\nTotal: {numIters} runs in {duration * 1000:.1f} ms\n"
+        f"Avg: {duration * 1000 / numIters:f}"
+    )
 
-def batch_verification():
+
+def batch_verification() -> None:
 
     numIters = 100000
     sig_bytes = []
@@ -39,28 +44,29 @@ def batch_verification():
 
     pks = []
 
-    start = startStopwatch();
+    start = startStopwatch()
     for pk in pk_bytes:
         pks.append(G1Element.from_bytes(pk))
 
-    endStopwatch("Public key validation", start, numIters);
+    endStopwatch("Public key validation", start, numIters)
 
     sigs = []
 
     start = startStopwatch()
     for sig in sig_bytes:
         sigs.append(G2Element.from_bytes(sig))
-    endStopwatch("Signature validation", start, numIters);
+    endStopwatch("Signature validation", start, numIters)
 
     start = startStopwatch()
     aggSig = AugSchemeMPL.aggregate(sigs)
-    endStopwatch("Aggregation", start, numIters);
+    endStopwatch("Aggregation", start, numIters)
 
     start = startStopwatch()
-    ok = AugSchemeMPL.aggregate_verify(pks, ms, aggSig);
-    endStopwatch("Batch verification", start, numIters);
+    ok = AugSchemeMPL.aggregate_verify(pks, ms, aggSig)
+    endStopwatch("Batch verification", start, numIters)
     if not ok:
         print("aggregate_verification failed!")
         sys.exit(1)
+
 
 batch_verification()
