@@ -51,7 +51,8 @@ cmake --build . --parallel 4
 
 ## Build Python binds
 
-Our Python binds target Python 3.10 or higher; they depend on
+Our Python binds target Python 3.10 or higher; they depend on the following packages. Sample code is available
+at [`binds/python/samples`](binds/python/samples).
 
 * [`pybind11`](https://github.com/pybind/pybind11) (bridging C++ and Python)
 * [`pytest`](https://github.com/pytest-dev/pytest) (benchmarks and unit tests, part of optional `[dev]` dependency group)
