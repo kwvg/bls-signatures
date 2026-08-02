@@ -11,7 +11,6 @@
 """Build configuration for the dashbls package."""
 
 import os
-import platform
 import re
 import subprocess
 import sys
@@ -29,6 +28,7 @@ class CMakeExtension(Extension):
 
 class CMakeBuild(build_ext):
     CMAKE_MINIMUM = (3, 18, 0)
+    WINDOWS_GENERATOR_ARCH = {"win-amd64": "x64", "win-arm64": "ARM64", "win32": "Win32"}
 
     def run(self):
         try:
@@ -63,13 +63,18 @@ class CMakeBuild(build_ext):
         cfg = "Debug" if self.debug else "Release"
         build_args = ["--config", cfg]
 
-        if platform.system() == "Windows":
-            cmake_args += [
+        if sys.platform == "win32":
+            target = sysconfig.get_platform()
+            arch = self.WINDOWS_GENERATOR_ARCH.get(target)
+            if arch is None:
+                raise RuntimeError("unsupported windows platform: " + target)
+            cmake_args.append(
                 "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}".format(cfg.upper(), extdir)
-            ]
-            if sys.maxsize > 2 ** 32:
-                cmake_args += ["-A", "x64"]
-            build_args += ["--", "/m"]
+            )
+            generator = os.environ.get("CMAKE_GENERATOR", "Visual Studio")
+            if generator.startswith("Visual Studio"):
+                cmake_args += ["-A", arch]
+                build_args += ["--", "/m"]
         else:
             cmake_args += ["-DCMAKE_BUILD_TYPE=" + cfg]
             build_args += ["--", "-j", "6"]
