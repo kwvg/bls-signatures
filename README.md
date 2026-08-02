@@ -50,7 +50,7 @@ cmake --build . -- -j 4
 Our Python binds target Python 3.10 or higher; they depend on
 
 * [`pybind11`](https://github.com/pybind/pybind11) (bridging C++ and Python)
-* [`pytest`](https://github.com/pytest-dev/pytest) (unit tests, part of optional `[.dev]` dependency group)
+* [`pytest`](https://github.com/pytest-dev/pytest) (benchmarks and unit tests, part of optional `[.dev]` dependency group)
 * [`ruff`](https://github.com/astral-sh/ruff) (linting, part of optional `[.dev]` dependency group)
 
 > [!NOTE]
@@ -78,7 +78,7 @@ uv run ruff format --check
 uv run pytest -v binds/python/test_unit.py
 
 # Run benchmarks
-uv run python binds/python/benchmark.py
+uv run pytest -v binds/python/test_bench.py --benchmark-only
 ```
 
 ## License
