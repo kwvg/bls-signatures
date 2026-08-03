@@ -35,4 +35,8 @@ jobs:
 
   build-py:
     name: Python
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
     uses: ./.github/workflows/binds-py.yml

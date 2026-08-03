@@ -49,6 +49,20 @@ cmake --build . --parallel 4
 ./src/runbench
 ```
 
+## Install Python binds
+
+Releases are published to a [PEP 503](https://peps.python.org/pep-0503/) index hosted on GitHub Pages rather than to
+PyPI.
+
+```sh
+pip install --extra-index-url https://dashpay.github.io/bls-signatures/pep503/ dashbls
+```
+
+> [!IMPORTANT]
+> Use `--extra-index-url`, not `--index-url`. Platforms we do not ship a wheel for fall back to the sdist, and building
+> it needs `cmake`, `pybind11`, `setuptools_scm` and `setuptools` from PyPI. `--index-url` would replace PyPI with an
+> index that carries only `dashbls`, so the build would fail before it started.
+
 ## Build Python binds
 
 Our Python binds target Python 3.10 or higher; they depend on the following packages. Sample code is available
