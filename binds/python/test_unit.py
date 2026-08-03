@@ -22,6 +22,7 @@ from dashbls import (
     GTElement,
     PopSchemeMPL,
     PrivateKey,
+    Util,
 )
 
 # fmt: off
@@ -35,6 +36,12 @@ MSG2 = bytes([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
 SCHEMES = (BasicSchemeMPL, AugSchemeMPL, PopSchemeMPL)
 SCHEME_IDS = [scheme.__name__ for scheme in SCHEMES]
+
+G1_DST = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_"
+G2_DST = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_"
+
+# Keeps md_hmac's alloca of the seed off the stack, see CopySeed in the binds
+SEED_LIMIT = 64 * 1024
 
 
 def _derive_two_keypairs() -> tuple[PrivateKey, G1Element, PrivateKey, G1Element]:
@@ -287,10 +294,6 @@ def test_aggregate_verify_zero_items() -> None:
     assert AugSchemeMPL.aggregate_verify([], [], G2Element())
 
 
-G1_DST = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_"
-G2_DST = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_"
-
-
 def test_from_message() -> None:
     msg = bytes([10]) * 32
     assert G2Element.from_message(msg, G2_DST) == BasicSchemeMPL.g2_from_message(msg)
@@ -316,6 +319,61 @@ def test_from_message_rejects_oversized_dst(element: type, size: int) -> None:
 
 def test_from_message_accepts_maximum_dst() -> None:
     assert G2Element.from_message(bytes([10]) * 32, b"x" * 255) != G2Element()
+
+
+class _LyingBytes(bytes):
+    """A bytes subclass whose __len__ disagrees with its payload."""
+
+    def __init__(self, payload: bytes, claimed_len: int) -> None:
+        del payload
+        self._claimed_len = claimed_len
+
+    def __new__(cls, payload: bytes, claimed_len: int) -> "_LyingBytes":
+        del claimed_len
+        return super().__new__(cls, payload)
+
+    def __len__(self) -> int:
+        return self._claimed_len
+
+
+@pytest.mark.parametrize("element", [G1Element, G2Element], ids=["G1Element", "G2Element"])
+def test_from_message_measures_the_dst_payload_not_its_len(element: type) -> None:
+    """The length check has to read the same bytes the copy takes, or a subclass
+    that understates __len__ walks an oversized tag straight into relic."""
+    dst = _LyingBytes(b"x" * 256, 1)
+    assert len(dst) == 1
+    with pytest.raises(ValueError):
+        element.from_message(bytes([10]) * 32, dst)
+
+    # and the mirror case: a small tag must not be rejected for lying upwards
+    honest = G1_DST if element is G1Element else G2_DST
+    assert element.from_message(bytes([10]) * 32, _LyingBytes(honest, 300)) == element.from_message(
+        bytes([10]) * 32, honest
+    )
+
+
+def test_length_checked_paths_use_the_payload_of_a_bytes_subclass() -> None:
+    """Every entry point that measures a length before copying must agree with
+    the payload it ends up hashing, whatever __len__ claims."""
+    assert Util.hash256(_LyingBytes(b"abc", 1 << 40)) == Util.hash256(b"abc")
+
+    seed = bytes([9]) * 32
+    for scheme in (BasicSchemeMPL, AugSchemeMPL, PopSchemeMPL):
+        sk = scheme.key_gen(_LyingBytes(seed, 1))
+        assert sk == scheme.key_gen(seed)
+        msg = bytes([1, 2, 3])
+        assert scheme.sign(sk, _LyingBytes(msg, 1 << 40)) == scheme.sign(sk, msg)
+        assert scheme.verify(sk.get_g1(), _LyingBytes(msg, 1), scheme.sign(sk, msg))
+
+
+@pytest.mark.parametrize("scheme", SCHEMES, ids=SCHEME_IDS)
+def test_key_gen_rejects_oversized_seeds(scheme: type) -> None:
+    """relic is built ALLOC=AUTO, so md_hmac stages the seed with alloca and a
+    seed of a few MiB would take the process down instead of raising."""
+    with pytest.raises(ValueError):
+        scheme.key_gen(b"x" * (SEED_LIMIT + 1))
+    # the cap itself has to keep working
+    assert scheme.key_gen(b"x" * SEED_LIMIT) == scheme.key_gen(b"x" * SEED_LIMIT)
 
 
 def test_from_bytes_and_from_bytes_unchecked_agree_on_valid_point() -> None:
@@ -372,3 +430,11 @@ def test_from_bytes_rejects_non_contiguous_buffers(cls: type, size: int) -> None
 def test_from_bytes_unchecked_rejects_non_contiguous_buffers(cls: type, size: int) -> None:
     with pytest.raises(BufferError):
         cls.from_bytes_unchecked(memoryview(bytearray(size))[::-1])
+
+
+@pytest.mark.parametrize("element", [G1Element, G2Element], ids=["G1Element", "G2Element"])
+def test_from_message_accepts_a_large_message(element: type) -> None:
+    # ep_map_dst takes the message length as an int and relic checks nothing on
+    # its side, so the binds guard it. Anything under the limit has to keep
+    # working; the limit itself is not testable without ~2 GiB of memory.
+    assert element.from_message(b"x" * (1 << 20), G1_DST) != element()

@@ -21,8 +21,10 @@
 #include <mutex>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <dashbls/bls.hpp>
 #include <dashbls/elements.hpp>
@@ -59,19 +61,59 @@ struct RelicGuard {
     std::lock_guard<std::mutex> lock;
 };
 
-// md_xmd caps a tag at 255 bytes but compares signed, so a tag at or beyond 2 GiB
-// truncates negative, slips the guard and is widened back to a huge length.
+// Measure before copying, so an oversized input fails as ValueError instead of
+// bad_alloc, and measure the header rather than py::len, because a subclass may
+// override __len__ while the copy below still takes the backing payload.
+std::string CopyChecked(const py::bytes &b, size_t limit, const char *who, const char *what)
+{
+    const auto signed_size = PyBytes_Size(b.ptr());
+    if (signed_size < 0) {
+        throw py::error_already_set();
+    }
+    const auto size = static_cast<size_t>(signed_size);
+    if (size > limit) {
+        throw std::invalid_argument(
+            std::string(who) + ": " + what + " must be at most " + std::to_string(limit) +
+            " bytes, got " + std::to_string(size));
+    }
+    return std::string(b);
+}
+
+// md_xmd caps a tag at 255 bytes but compares signed, so a tag at or beyond
+// 2 GiB truncates negative, slips the guard and is widened back to a huge
+// length.
 std::string CopyDst(const py::bytes &dst, const char *who)
 {
-    // Measure before copying: the tags this rejects are precisely the ones too
-    // large to want a second copy of.
-    const auto size = py::len(dst);
-    if (size > 255) {
-        throw std::invalid_argument(
-            std::string(who) + ": domain separation tag must be at most 255 bytes, got " +
-            std::to_string(size));
-    }
-    return std::string(dst);
+    return CopyChecked(dst, 255, who, "domain separation tag");
+}
+
+// ep_map_dst takes the message length as an int and md_xmd checks only the
+// output and tag lengths, so nothing on relic's side catches a message at or
+// beyond 2 GiB narrowing negative on the way in.
+std::string CopyMsg(const py::bytes &msg, const char *who)
+{
+    return CopyChecked(msg, std::numeric_limits<int>::max(), who, "message");
+}
+
+// The augmented schemes prepend a serialized G1Element and hand the result to
+// the same int-typed length, so the message has to leave room for the prefix.
+std::string CopyAugMsg(const py::bytes &msg, const char *who)
+{
+    return CopyChecked(
+        msg, std::numeric_limits<int>::max() - G1Element::SIZE, who, "message");
+}
+
+// relic is built ALLOC=AUTO, so md_hmac stages the seed on the stack and a few
+// MiB of it takes the process down. Nothing near this cap is a legitimate IKM
+// (the spec floor is 32 bytes), so keep it far below any thread's stack.
+std::string CopySeed(const py::bytes &seed, const char *who)
+{
+    return CopyChecked(seed, 64 * 1024, who, "seed");
+}
+
+std::vector<uint8_t> ToVec(const std::string &s)
+{
+    return std::vector<uint8_t>(s.begin(), s.end());
 }
 
 // Bytes is a pointer and a length, so a strided view has no counterpart to
@@ -155,8 +197,8 @@ PYBIND11_MODULE(dashbls, m)
         });
 
     py::class_<Util>(m, "Util").def("hash256", [](const py::bytes &message) {
-        std::string str(message);
-        const uint8_t *input = reinterpret_cast<const uint8_t *>(str.data());
+        // Hash256 takes a size_t but md_map_sh256 narrows it to an int
+        const auto str = CopyMsg(message, "Util.hash256");
         uint8_t output[BLS::MESSAGE_HASH_LEN];
         {
             RelicGuard guard;
@@ -174,10 +216,9 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "key_gen",
             [](const py::bytes &b) {
-                std::string str(b);
+                const auto str = CopySeed(b, "BasicSchemeMPL.key_gen");
                 RelicGuard guard;
-                const vector<uint8_t> inputVec(str.begin(), str.end());
-                return BasicSchemeMPL().KeyGen(inputVec);
+                return BasicSchemeMPL().KeyGen(ToVec(str));
             })
         .def("derive_child_sk", [](const PrivateKey& sk, uint32_t index){
             RelicGuard guard;
@@ -198,20 +239,18 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "sign",
             [](const PrivateKey &pk, const py::bytes &msg) {
-                std::string s(msg);
+                const auto s = CopyMsg(msg, "BasicSchemeMPL.sign");
                 RelicGuard guard;
-                vector<uint8_t> v(s.begin(), s.end());
-                return BasicSchemeMPL().Sign(pk, v);
+                return BasicSchemeMPL().Sign(pk, ToVec(s));
             })
         .def(
             "verify",
             [](const G1Element &pk,
                const py::bytes &msg,
                const G2Element &sig) {
-                std::string s(msg);
+                const auto s = CopyMsg(msg, "BasicSchemeMPL.verify");
                 RelicGuard guard;
-                vector<uint8_t> v(s.begin(), s.end());
-                return BasicSchemeMPL().Verify(pk, v, sig);
+                return BasicSchemeMPL().Verify(pk, ToVec(s), sig);
             })
         .def(
             "aggregate_verify",
@@ -219,9 +258,9 @@ PYBIND11_MODULE(dashbls, m)
                const vector<py::bytes> &msgs,
                const G2Element &sig) {
                 vector<vector<uint8_t>> vecs(msgs.size());
-                for (int i = 0; i < (int)msgs.size(); ++i) {
-                    std::string s(msgs[i]);
-                    vecs[i] = vector<uint8_t>(s.begin(), s.end());
+                for (size_t i = 0; i < msgs.size(); ++i) {
+                    vecs[i] = ToVec(
+                        CopyMsg(msgs[i], "BasicSchemeMPL.aggregate_verify"));
                 }
                 RelicGuard guard;
                 return BasicSchemeMPL().AggregateVerify(pks, vecs, sig);
@@ -229,7 +268,7 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "g2_from_message",
             [](const py::bytes &msg) {
-                const auto msg_str = std::string(msg);
+                const auto msg_str = CopyMsg(msg, "BasicSchemeMPL.g2_from_message");
                 RelicGuard guard;
                 const auto msg_bytes = Bytes((const uint8_t *)msg_str.c_str(), msg_str.size());
                 return G2Element::FromMessage(
@@ -247,10 +286,9 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "key_gen",
             [](const py::bytes &b) {
-                std::string str(b);
+                const auto str = CopySeed(b, "AugSchemeMPL.key_gen");
                 RelicGuard guard;
-                const vector<uint8_t> inputVec(str.begin(), str.end());
-                return AugSchemeMPL().KeyGen(inputVec);
+                return AugSchemeMPL().KeyGen(ToVec(str));
             })
         .def("derive_child_sk", [](const PrivateKey& sk, uint32_t index){
             RelicGuard guard;
@@ -271,30 +309,27 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "sign",
             [](const PrivateKey &pk, const py::bytes &msg) {
-                std::string s(msg);
+                const auto s = CopyAugMsg(msg, "AugSchemeMPL.sign");
                 RelicGuard guard;
-                vector<uint8_t> v(s.begin(), s.end());
-                return AugSchemeMPL().Sign(pk, v);
+                return AugSchemeMPL().Sign(pk, ToVec(s));
             })
         .def(
             "sign",
             [](const PrivateKey &pk,
                const py::bytes &msg,
                const G1Element &prepend_pk) {
-                std::string s(msg);
+                const auto s = CopyAugMsg(msg, "AugSchemeMPL.sign");
                 RelicGuard guard;
-                vector<uint8_t> v(s.begin(), s.end());
-                return AugSchemeMPL().Sign(pk, v, prepend_pk);
+                return AugSchemeMPL().Sign(pk, ToVec(s), prepend_pk);
             })
         .def(
             "verify",
             [](const G1Element &pk,
                const py::bytes &msg,
                const G2Element &sig) {
-                std::string s(msg);
+                const auto s = CopyAugMsg(msg, "AugSchemeMPL.verify");
                 RelicGuard guard;
-                vector<uint8_t> v(s.begin(), s.end());
-                return AugSchemeMPL().Verify(pk, v, sig);
+                return AugSchemeMPL().Verify(pk, ToVec(s), sig);
             })
         .def(
             "aggregate_verify",
@@ -302,9 +337,9 @@ PYBIND11_MODULE(dashbls, m)
                const vector<py::bytes> &msgs,
                const G2Element &sig) {
                 vector<vector<uint8_t>> vecs(msgs.size());
-                for (int i = 0; i < (int)msgs.size(); ++i) {
-                    std::string s(msgs[i]);
-                    vecs[i] = vector<uint8_t>(s.begin(), s.end());
+                for (size_t i = 0; i < msgs.size(); ++i) {
+                    vecs[i] = ToVec(
+                        CopyAugMsg(msgs[i], "AugSchemeMPL.aggregate_verify"));
                 }
                 RelicGuard guard;
                 return AugSchemeMPL().AggregateVerify(pks, vecs, sig);
@@ -312,7 +347,7 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "g2_from_message",
             [](const py::bytes &msg) {
-                const auto msg_str = std::string(msg);
+                const auto msg_str = CopyMsg(msg, "AugSchemeMPL.g2_from_message");
                 RelicGuard guard;
                 const auto msg_bytes = Bytes((const uint8_t *)msg_str.c_str(), msg_str.size());
                 return G2Element::FromMessage(
@@ -330,10 +365,9 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "key_gen",
             [](const py::bytes &b) {
-                std::string str(b);
+                const auto str = CopySeed(b, "PopSchemeMPL.key_gen");
                 RelicGuard guard;
-                const vector<uint8_t> inputVec(str.begin(), str.end());
-                return PopSchemeMPL().KeyGen(inputVec);
+                return PopSchemeMPL().KeyGen(ToVec(str));
             })
         .def("derive_child_sk", [](const PrivateKey& sk, uint32_t index){
             RelicGuard guard;
@@ -354,20 +388,18 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "sign",
             [](const PrivateKey &pk, const py::bytes &msg) {
-                std::string s(msg);
+                const auto s = CopyMsg(msg, "PopSchemeMPL.sign");
                 RelicGuard guard;
-                vector<uint8_t> v(s.begin(), s.end());
-                return PopSchemeMPL().Sign(pk, v);
+                return PopSchemeMPL().Sign(pk, ToVec(s));
             })
         .def(
             "verify",
             [](const G1Element &pk,
                const py::bytes &msg,
                const G2Element &sig) {
-                std::string s(msg);
+                const auto s = CopyMsg(msg, "PopSchemeMPL.verify");
                 RelicGuard guard;
-                vector<uint8_t> v(s.begin(), s.end());
-                return PopSchemeMPL().Verify(pk, v, sig);
+                return PopSchemeMPL().Verify(pk, ToVec(s), sig);
             })
         .def(
             "aggregate_verify",
@@ -375,9 +407,9 @@ PYBIND11_MODULE(dashbls, m)
                const vector<py::bytes> &msgs,
                const G2Element &sig) {
                 vector<vector<uint8_t>> vecs(msgs.size());
-                for (int i = 0; i < (int)msgs.size(); ++i) {
-                    std::string s(msgs[i]);
-                    vecs[i] = vector<uint8_t>(s.begin(), s.end());
+                for (size_t i = 0; i < msgs.size(); ++i) {
+                    vecs[i] =
+                        ToVec(CopyMsg(msgs[i], "PopSchemeMPL.aggregate_verify"));
                 }
                 RelicGuard guard;
                 return PopSchemeMPL().AggregateVerify(pks, vecs, sig);
@@ -385,7 +417,7 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "g2_from_message",
             [](const py::bytes &msg) {
-                const auto msg_str = std::string(msg);
+                const auto msg_str = CopyMsg(msg, "PopSchemeMPL.g2_from_message");
                 RelicGuard guard;
                 const auto msg_bytes = Bytes((const uint8_t *)msg_str.c_str(), msg_str.size());
                 return G2Element::FromMessage(
@@ -407,10 +439,9 @@ PYBIND11_MODULE(dashbls, m)
             [](const vector<G1Element> &pks,
                const py::bytes &msg,
                const G2Element &sig) {
-                std::string s(msg);
+                const auto s = CopyMsg(msg, "PopSchemeMPL.fast_aggregate_verify");
                 RelicGuard guard;
-                vector<uint8_t> v(s.begin(), s.end());
-                return PopSchemeMPL().FastAggregateVerify(pks, v, sig);
+                return PopSchemeMPL().FastAggregateVerify(pks, ToVec(s), sig);
             });
 
     py::class_<G1Element>(m, "G1Element")
@@ -457,7 +488,7 @@ PYBIND11_MODULE(dashbls, m)
         .def_static(
             "from_message",
             [](const py::bytes &msg, const py::bytes &dst) {
-                const auto msg_str = std::string(msg);
+                const auto msg_str = CopyMsg(msg, "G1Element.from_message");
                 const auto dst_str = CopyDst(dst, "G1Element.from_message");
                 RelicGuard guard;
                 return G1Element::FromMessage(
@@ -584,7 +615,7 @@ PYBIND11_MODULE(dashbls, m)
         .def_static(
             "from_message",
             [](const py::bytes &msg, const py::bytes &dst) {
-                const auto msg_str = std::string(msg);
+                const auto msg_str = CopyMsg(msg, "G2Element.from_message");
                 const auto dst_str = CopyDst(dst, "G2Element.from_message");
                 RelicGuard guard;
                 return G2Element::FromMessage(
