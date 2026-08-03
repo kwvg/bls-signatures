@@ -372,3 +372,11 @@ def test_from_bytes_rejects_non_contiguous_buffers(cls: type, size: int) -> None
 def test_from_bytes_unchecked_rejects_non_contiguous_buffers(cls: type, size: int) -> None:
     with pytest.raises(BufferError):
         cls.from_bytes_unchecked(memoryview(bytearray(size))[::-1])
+
+
+@pytest.mark.parametrize("element", [G1Element, G2Element], ids=["G1Element", "G2Element"])
+def test_from_message_accepts_a_large_message(element: type) -> None:
+    # ep_map_dst takes the message length as an int and relic checks nothing on
+    # its side, so the binds guard it. Anything under the limit has to keep
+    # working; the limit itself is not testable without ~2 GiB of memory.
+    assert element.from_message(b"x" * (1 << 20), G1_DST) != element()

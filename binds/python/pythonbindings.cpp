@@ -21,6 +21,7 @@
 #include <mutex>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -59,19 +60,32 @@ struct RelicGuard {
     std::lock_guard<std::mutex> lock;
 };
 
+// Measure before copying: what these reject is precisely what is too large to
+// want a second copy of, which would fail as bad_alloc rather than ValueError.
+std::string CopyChecked(const py::bytes &b, size_t limit, const char *who, const char *what)
+{
+    const auto size = py::len(b);
+    if (size > limit) {
+        throw std::invalid_argument(
+            std::string(who) + ": " + what + " must be at most " + std::to_string(limit) +
+            " bytes, got " + std::to_string(size));
+    }
+    return std::string(b);
+}
+
 // md_xmd caps a tag at 255 bytes but compares signed, so a tag at or beyond 2 GiB
 // truncates negative, slips the guard and is widened back to a huge length.
 std::string CopyDst(const py::bytes &dst, const char *who)
 {
-    // Measure before copying: the tags this rejects are precisely the ones too
-    // large to want a second copy of.
-    const auto size = py::len(dst);
-    if (size > 255) {
-        throw std::invalid_argument(
-            std::string(who) + ": domain separation tag must be at most 255 bytes, got " +
-            std::to_string(size));
-    }
-    return std::string(dst);
+    return CopyChecked(dst, 255, who, "domain separation tag");
+}
+
+// ep_map_dst takes the message length as an int and md_xmd checks only the
+// output and tag lengths, so nothing on relic's side catches a message at or
+// beyond 2 GiB narrowing negative on the way in.
+std::string CopyMsg(const py::bytes &msg, const char *who)
+{
+    return CopyChecked(msg, std::numeric_limits<int>::max(), who, "message");
 }
 
 // Bytes is a pointer and a length, so a strided view has no counterpart to
@@ -229,7 +243,7 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "g2_from_message",
             [](const py::bytes &msg) {
-                const auto msg_str = std::string(msg);
+                const auto msg_str = CopyMsg(msg, "BasicSchemeMPL.g2_from_message");
                 RelicGuard guard;
                 const auto msg_bytes = Bytes((const uint8_t *)msg_str.c_str(), msg_str.size());
                 return G2Element::FromMessage(
@@ -312,7 +326,7 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "g2_from_message",
             [](const py::bytes &msg) {
-                const auto msg_str = std::string(msg);
+                const auto msg_str = CopyMsg(msg, "AugSchemeMPL.g2_from_message");
                 RelicGuard guard;
                 const auto msg_bytes = Bytes((const uint8_t *)msg_str.c_str(), msg_str.size());
                 return G2Element::FromMessage(
@@ -385,7 +399,7 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "g2_from_message",
             [](const py::bytes &msg) {
-                const auto msg_str = std::string(msg);
+                const auto msg_str = CopyMsg(msg, "PopSchemeMPL.g2_from_message");
                 RelicGuard guard;
                 const auto msg_bytes = Bytes((const uint8_t *)msg_str.c_str(), msg_str.size());
                 return G2Element::FromMessage(
@@ -457,7 +471,7 @@ PYBIND11_MODULE(dashbls, m)
         .def_static(
             "from_message",
             [](const py::bytes &msg, const py::bytes &dst) {
-                const auto msg_str = std::string(msg);
+                const auto msg_str = CopyMsg(msg, "G1Element.from_message");
                 const auto dst_str = CopyDst(dst, "G1Element.from_message");
                 RelicGuard guard;
                 return G1Element::FromMessage(
@@ -584,7 +598,7 @@ PYBIND11_MODULE(dashbls, m)
         .def_static(
             "from_message",
             [](const py::bytes &msg, const py::bytes &dst) {
-                const auto msg_str = std::string(msg);
+                const auto msg_str = CopyMsg(msg, "G2Element.from_message");
                 const auto dst_str = CopyDst(dst, "G2Element.from_message");
                 RelicGuard guard;
                 return G2Element::FromMessage(
