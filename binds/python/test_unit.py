@@ -19,6 +19,7 @@ from dashbls import (
     BasicSchemeMPL,
     G1Element,
     G2Element,
+    GTElement,
     PopSchemeMPL,
     PrivateKey,
 )
@@ -337,3 +338,37 @@ def test_from_bytes_rejects_invalid_g2_point() -> None:
     bad_g2_point_hex = "8f2886c94eaeac335c8414cbf14c16681b225380cfee3293becc4531d5b415984b4ea4050d9ecda11fbc21c60627e9d212dfcb17d2b5ae399aa3fbcb099e05baa496b852ad976fb633cc6766b02fca4da549dc063908463b2906ad64e8b310ad"  # noqa: E501
     with pytest.raises(ValueError):
         G2Element.from_bytes(bytes.fromhex(bad_g2_point_hex))
+
+
+@pytest.mark.parametrize(
+    ("cls", "size"),
+    [
+        (PrivateKey, PrivateKey.PRIVATE_KEY_SIZE),
+        (G1Element, G1Element.SIZE),
+        (G2Element, G2Element.SIZE),
+        (GTElement, GTElement.SIZE),
+    ],
+    ids=["PrivateKey", "G1Element", "G2Element", "GTElement"],
+)
+def test_from_bytes_rejects_non_contiguous_buffers(cls: type, size: int) -> None:
+    # A reversed view points at the last backing byte with a stride of -1, so
+    # reading it as if it were contiguous runs off the end of the allocation
+    with pytest.raises(BufferError):
+        cls.from_bytes(memoryview(bytearray(size))[::-1])
+    # A strided view stays in bounds but is not the bytes the caller passed
+    with pytest.raises(BufferError):
+        cls.from_bytes(memoryview(bytearray(size * 2))[::2])
+
+
+@pytest.mark.parametrize(
+    ("cls", "size"),
+    [
+        (G1Element, G1Element.SIZE),
+        (G2Element, G2Element.SIZE),
+        (GTElement, GTElement.SIZE),
+    ],
+    ids=["G1Element", "G2Element", "GTElement"],
+)
+def test_from_bytes_unchecked_rejects_non_contiguous_buffers(cls: type, size: int) -> None:
+    with pytest.raises(BufferError):
+        cls.from_bytes_unchecked(memoryview(bytearray(size))[::-1])

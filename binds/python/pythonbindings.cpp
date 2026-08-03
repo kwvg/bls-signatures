@@ -16,6 +16,10 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 
@@ -52,6 +56,33 @@ std::string CopyDst(const py::bytes &dst, const char *who)
     }
     return std::string(dst);
 }
+
+// Bytes is a pointer and a length, so a strided view has no counterpart to
+// mirror; ask CPython for a contiguous one and let it raise, rather than
+// reinterpreting info.ptr as contiguous and reading past the caller's view.
+template <size_t N>
+std::array<uint8_t, N> CopyBuffer(const py::buffer &b, const char *what)
+{
+    auto *view = new Py_buffer();
+    if (PyObject_GetBuffer(b.ptr(), view, PyBUF_C_CONTIGUOUS | PyBUF_FORMAT) != 0) {
+        delete view;
+        throw py::error_already_set();
+    }
+    py::buffer_info info(view);
+
+    if (info.format != py::format_descriptor<uint8_t>::format() || info.ndim != 1)
+        throw std::runtime_error("Incompatible buffer format!");
+
+    if (info.size != static_cast<py::ssize_t>(N)) {
+        throw std::invalid_argument(
+            std::string("Length of bytes object not equal to ") + what);
+    }
+
+    std::array<uint8_t, N> data;
+    const auto *data_ptr = reinterpret_cast<const uint8_t *>(info.ptr);
+    std::copy(data_ptr, data_ptr + N, data.data());
+    return data;
+}
 } // anonymous namespace
 
 PYBIND11_MODULE(dashbls, m)
@@ -63,18 +94,7 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "from_bytes",
             [](py::buffer const b) {
-                py::buffer_info info = b.request();
-                if (info.format != py::format_descriptor<uint8_t>::format() ||
-                    info.ndim != 1)
-                    throw std::runtime_error("Incompatible buffer format!");
-
-                if ((int)info.size != PrivateKey::PRIVATE_KEY_SIZE) {
-                    throw std::invalid_argument(
-                        "Length of bytes object not equal to PrivateKey::SIZE");
-                }
-                auto data_ptr = reinterpret_cast<const uint8_t *>(info.ptr);
-                std::array<uint8_t, PrivateKey::PRIVATE_KEY_SIZE> data;
-                std::copy(data_ptr, data_ptr + data.size(), data.data());
+                auto data = CopyBuffer<PrivateKey::PRIVATE_KEY_SIZE>(b, "PrivateKey::SIZE");
                 py::gil_scoped_release release;
                 return PrivateKey::FromBytes(data);
             })
@@ -397,53 +417,22 @@ PYBIND11_MODULE(dashbls, m)
             return G1Element::FromBytes(buffer);
         }))
         .def(py::init([](py::buffer const b) {
-            py::buffer_info info = b.request();
-            if (info.format != py::format_descriptor<uint8_t>::format() ||
-                info.ndim != 1)
-                throw std::runtime_error("Incompatible buffer format!");
-
-            if ((int)info.size != G1Element::SIZE) {
-                throw std::invalid_argument(
-                    "Length of bytes object not equal to G1Element::SIZE");
-            }
-            auto data_ptr = static_cast<uint8_t *>(info.ptr);
-            std::array<uint8_t, G1Element::SIZE> data;
-            std::copy(data_ptr, data_ptr + data.size(), data.data());
+            auto data = CopyBuffer<G1Element::SIZE>(b, "G1Element::SIZE");
             py::gil_scoped_release release;
             return G1Element::FromBytes(data);
         }))
         .def(
             "from_bytes",
             [](py::buffer const b) {
-                py::buffer_info info = b.request();
-                if (info.format != py::format_descriptor<uint8_t>::format() ||
-                    info.ndim != 1)
-                    throw std::runtime_error("Incompatible buffer format!");
-
-                if ((int)info.size != G1Element::SIZE) {
-                    throw std::invalid_argument(
-                        "Length of bytes object not equal to G1Element::SIZE");
-                }
-                auto data_ptr = reinterpret_cast<const uint8_t *>(info.ptr);
-                std::array<uint8_t, G1Element::SIZE> data;
-                std::copy(data_ptr, data_ptr + data.size(), data.data());
+                auto data = CopyBuffer<G1Element::SIZE>(b, "G1Element::SIZE");
                 py::gil_scoped_release release;
                 return G1Element::FromBytes(data);
             })
         .def(
             "from_bytes_unchecked",
             [](py::buffer const b) {
-              py::buffer_info info = b.request();
-              if (info.format != py::format_descriptor<uint8_t>::format() ||
-                  info.ndim != 1)
-                  throw std::runtime_error("Incompatible buffer format!");
-
-              if ((int)info.size != G1Element::SIZE) {
-                  throw std::invalid_argument(
-                      "Length of bytes object not equal to G1Element::SIZE");
-              }
-              auto data_ptr = reinterpret_cast<const uint8_t *>(info.ptr);
-              return G1Element::FromBytesUnchecked({data_ptr, G1Element::SIZE});
+              auto data = CopyBuffer<G1Element::SIZE>(b, "G1Element::SIZE");
+              return G1Element::FromBytesUnchecked(data);
             })
         .def("generator", &G1Element::Generator)
         .def_static(
@@ -538,18 +527,7 @@ PYBIND11_MODULE(dashbls, m)
         }))
         .def(py::init(&G2Element::FromByteVector), py::call_guard<py::gil_scoped_release>())
         .def(py::init([](py::buffer const b) {
-            py::buffer_info info = b.request();
-            if (info.format != py::format_descriptor<uint8_t>::format() ||
-                info.ndim != 1)
-                throw std::runtime_error("Incompatible buffer format!");
-
-            if ((int)info.size != G2Element::SIZE) {
-                throw std::invalid_argument(
-                    "Length of bytes object not equal to G2Element::SIZE");
-            }
-            auto data_ptr = static_cast<uint8_t *>(info.ptr);
-            std::array<uint8_t, G2Element::SIZE> data;
-            std::copy(data_ptr, data_ptr + data.size(), data.data());
+            auto data = CopyBuffer<G2Element::SIZE>(b, "G2Element::SIZE");
             py::gil_scoped_release release;
             return G2Element::FromBytes(data);
         }))
@@ -569,35 +547,15 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "from_bytes",
             [](py::buffer const b) {
-                py::buffer_info info = b.request();
-                if (info.format != py::format_descriptor<uint8_t>::format() ||
-                    info.ndim != 1)
-                    throw std::runtime_error("Incompatible buffer format!");
-
-                if ((int)info.size != G2Element::SIZE) {
-                    throw std::invalid_argument(
-                        "Length of bytes object not equal to G2Element::SIZE");
-                }
-                auto data_ptr = reinterpret_cast<const uint8_t *>(info.ptr);
-                std::array<uint8_t, G2Element::SIZE> data;
-                std::copy(data_ptr, data_ptr + data.size(), data.data());
+                auto data = CopyBuffer<G2Element::SIZE>(b, "G2Element::SIZE");
                 py::gil_scoped_release release;
                 return G2Element::FromBytes(data);
             })
         .def(
             "from_bytes_unchecked",
             [](py::buffer const b) {
-              py::buffer_info info = b.request();
-              if (info.format != py::format_descriptor<uint8_t>::format() ||
-                  info.ndim != 1)
-                  throw std::runtime_error("Incompatible buffer format!");
-
-              if ((int)info.size != G2Element::SIZE) {
-                  throw std::invalid_argument(
-                      "Length of bytes object not equal to G2Element::SIZE");
-              }
-              auto data_ptr = reinterpret_cast<const uint8_t *>(info.ptr);
-              return G2Element::FromBytesUnchecked({data_ptr, G2Element::SIZE});
+              auto data = CopyBuffer<G2Element::SIZE>(b, "G2Element::SIZE");
+              return G2Element::FromBytesUnchecked(data);
             })
         .def("generator", &G2Element::Generator)
         .def_static(
@@ -682,18 +640,7 @@ PYBIND11_MODULE(dashbls, m)
             "SIZE", [](py::object self) { return GTElement::SIZE; })
         .def(py::init(&GTElement::FromByteVector), py::call_guard<py::gil_scoped_release>())
         .def(py::init([](py::buffer const b) {
-            py::buffer_info info = b.request();
-            if (info.format != py::format_descriptor<uint8_t>::format() ||
-                info.ndim != 1)
-                throw std::runtime_error("Incompatible buffer format!");
-
-            if ((int)info.size != GTElement::SIZE) {
-                throw std::invalid_argument(
-                    "Length of bytes object not equal to GTElement::SIZE");
-            }
-            auto data_ptr = static_cast<uint8_t *>(info.ptr);
-            std::array<uint8_t, GTElement::SIZE> data;
-            std::copy(data_ptr, data_ptr + data.size(), data.data());
+            auto data = CopyBuffer<GTElement::SIZE>(b, "GTElement::SIZE");
             py::gil_scoped_release release;
             return GTElement::FromBytes(data);
         }))
@@ -713,36 +660,14 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "from_bytes",
             [](py::buffer const b) {
-                py::buffer_info info = b.request();
-                if (info.format != py::format_descriptor<uint8_t>::format() ||
-                    info.ndim != 1)
-                    throw std::runtime_error("Incompatible buffer format!");
-
-                if ((int)info.size != GTElement::SIZE) {
-                    throw std::invalid_argument(
-                        "Length of bytes object not equal to GTElement::SIZE");
-                }
-                auto data_ptr = reinterpret_cast<const uint8_t *>(info.ptr);
-                std::array<uint8_t, GTElement::SIZE> data;
-                std::copy(data_ptr, data_ptr + data.size(), data.data());
+                auto data = CopyBuffer<GTElement::SIZE>(b, "GTElement::SIZE");
                 py::gil_scoped_release release;
                 return GTElement::FromBytes(data);
             })
         .def(
             "from_bytes_unchecked",
             [](py::buffer const b) {
-                py::buffer_info info = b.request();
-                if (info.format != py::format_descriptor<uint8_t>::format() ||
-                    info.ndim != 1)
-                    throw std::runtime_error("Incompatible buffer format!");
-
-                if ((int)info.size != GTElement::SIZE) {
-                    throw std::invalid_argument(
-                        "Length of bytes object not equal to GTElement::SIZE");
-                }
-                auto data_ptr = reinterpret_cast<const uint8_t *>(info.ptr);
-                std::array<uint8_t, GTElement::SIZE> data;
-                std::copy(data_ptr, data_ptr + data.size(), data.data());
+                auto data = CopyBuffer<GTElement::SIZE>(b, "GTElement::SIZE");
                 py::gil_scoped_release release;
                 return GTElement::FromBytesUnchecked(data);
             })
