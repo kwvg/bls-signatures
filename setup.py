@@ -188,31 +188,13 @@ class BuildExt(build_ext):
 
 if platform.system() == "Windows":
     setup(
-        name="dashbls",
-        author="The Dash Core developers",
-        author_email="contact@dash.org",
-        description="Python 3.x binds for Dash's bls-signatures",
-        long_description=open("README.md").read(),
-        long_description_content_type="text/markdown",
-        url="https://github.com/dashpay/bls-signatures",
-        python_requires=">=3.7",
         setup_requires=["pybind11>=2.10.0"],
-        install_requires=["pybind11>=2.10.0"],
         ext_modules=ext_modules,
         cmdclass={"build_ext": BuildExt},
         zip_safe=False,
     )
 else:
     setup(
-        name="dashbls",
-        author="The Dash Core developers",
-        author_email="contact@dash.org",
-        description="Python 3.x binds for Dash's bls-signatures",
-        python_requires=">=3.7",
-        install_requires=["wheel"],
-        long_description=open("README.md").read(),
-        long_description_content_type="text/markdown",
-        url="https://github.com/dashpay/bls-signatures",
         ext_modules=[CMakeExtension("dashbls", ".")],
         cmdclass=dict(build_ext=CMakeBuild),
         zip_safe=False,
