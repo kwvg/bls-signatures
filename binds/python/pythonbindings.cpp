@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <mutex>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
@@ -41,6 +42,22 @@ inline int PyLong_AsByteArray(PyLongObject* obj, uint8_t* buf, Py_ssize_t size, 
 #endif // PY_VERSION_HEX >= 0x030d0000
     );
 }
+
+// relic's context is process-wide here (MULTI is unset, see setup.py), so a
+// released GIL leaves threads racing on its error code and PRNG state. The
+// GIL goes first so a waiter cannot strand the holder that must retake it.
+std::mutex &RelicMutex()
+{
+    static std::mutex mutex;
+    return mutex;
+}
+
+struct RelicGuard {
+    RelicGuard() : lock(RelicMutex()) {}
+
+    py::gil_scoped_release release;
+    std::lock_guard<std::mutex> lock;
+};
 
 // md_xmd caps a tag at 255 bytes but compares signed, so a tag at or beyond 2 GiB
 // truncates negative, slips the guard and is widened back to a huge length.
@@ -95,7 +112,7 @@ PYBIND11_MODULE(dashbls, m)
             "from_bytes",
             [](py::buffer const b) {
                 auto data = CopyBuffer<PrivateKey::PRIVATE_KEY_SIZE>(b, "PrivateKey::SIZE");
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return PrivateKey::FromBytes(data);
             })
         .def(
@@ -104,7 +121,7 @@ PYBIND11_MODULE(dashbls, m)
                 uint8_t *output =
                     Util::SecAlloc<uint8_t>(PrivateKey::PRIVATE_KEY_SIZE);
                 {
-                    py::gil_scoped_release release;
+                    RelicGuard guard;
                     k.Serialize(output);
                 }
                 py::bytes ret = py::bytes(
@@ -116,17 +133,18 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "__deepcopy__",
             [](const PrivateKey &k, const py::object &memo) {
+                RelicGuard guard;
                 return PrivateKey(k);
             })
         .def("get_g1", [](const PrivateKey &k) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return k.GetG1Element();
             })
-        .def("aggregate", &PrivateKey::Aggregate, py::call_guard<py::gil_scoped_release>())
-        .def(py::self == py::self)
-        .def(py::self != py::self)
+        .def("aggregate", &PrivateKey::Aggregate, py::call_guard<RelicGuard>())
+        .def(py::self == py::self, py::call_guard<RelicGuard>())
+        .def(py::self != py::self, py::call_guard<RelicGuard>())
         .def("__repr__", [](const PrivateKey &k) {
-            py::gil_scoped_release release;
+            RelicGuard guard;
             uint8_t *output = Util::SecAlloc<uint8_t>(PrivateKey::PRIVATE_KEY_SIZE);
             k.Serialize(output);
             std::string ret =
@@ -141,7 +159,7 @@ PYBIND11_MODULE(dashbls, m)
         const uint8_t *input = reinterpret_cast<const uint8_t *>(str.data());
         uint8_t output[BLS::MESSAGE_HASH_LEN];
         {
-            py::gil_scoped_release release;
+            RelicGuard guard;
             Util::Hash256(output, (const uint8_t *)str.data(), str.size());
         }
         return py::bytes(
@@ -150,38 +168,38 @@ PYBIND11_MODULE(dashbls, m)
 
     py::class_<BasicSchemeMPL>(m, "BasicSchemeMPL")
         .def("sk_to_g1", [](const PrivateKey &seckey){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return BasicSchemeMPL().SkToG1(seckey);
         })
         .def(
             "key_gen",
             [](const py::bytes &b) {
                 std::string str(b);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 const vector<uint8_t> inputVec(str.begin(), str.end());
                 return BasicSchemeMPL().KeyGen(inputVec);
             })
         .def("derive_child_sk", [](const PrivateKey& sk, uint32_t index){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return BasicSchemeMPL().DeriveChildSk(sk, index);
         })
         .def("derive_child_sk_unhardened", [](const PrivateKey& sk, uint32_t index){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return BasicSchemeMPL().DeriveChildSkUnhardened(sk, index);
         })
         .def("derive_child_pk_unhardened", [](const G1Element& pk, uint32_t index){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return BasicSchemeMPL().DeriveChildPkUnhardened(pk, index);
         })
         .def("aggregate", [](const vector<G2Element> &signatures) {
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return BasicSchemeMPL().Aggregate(signatures);
         })
         .def(
             "sign",
             [](const PrivateKey &pk, const py::bytes &msg) {
                 std::string s(msg);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 vector<uint8_t> v(s.begin(), s.end());
                 return BasicSchemeMPL().Sign(pk, v);
             })
@@ -191,7 +209,7 @@ PYBIND11_MODULE(dashbls, m)
                const py::bytes &msg,
                const G2Element &sig) {
                 std::string s(msg);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 vector<uint8_t> v(s.begin(), s.end());
                 return BasicSchemeMPL().Verify(pk, v, sig);
             })
@@ -205,14 +223,14 @@ PYBIND11_MODULE(dashbls, m)
                     std::string s(msgs[i]);
                     vecs[i] = vector<uint8_t>(s.begin(), s.end());
                 }
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return BasicSchemeMPL().AggregateVerify(pks, vecs, sig);
             })
         .def(
             "g2_from_message",
             [](const py::bytes &msg) {
                 const auto msg_str = std::string(msg);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 const auto msg_bytes = Bytes((const uint8_t *)msg_str.c_str(), msg_str.size());
                 return G2Element::FromMessage(
                     msg_bytes,
@@ -223,38 +241,38 @@ PYBIND11_MODULE(dashbls, m)
 
     py::class_<AugSchemeMPL>(m, "AugSchemeMPL")
         .def("sk_to_g1", [](const PrivateKey &seckey){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return AugSchemeMPL().SkToG1(seckey);
         })
         .def(
             "key_gen",
             [](const py::bytes &b) {
                 std::string str(b);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 const vector<uint8_t> inputVec(str.begin(), str.end());
                 return AugSchemeMPL().KeyGen(inputVec);
             })
         .def("derive_child_sk", [](const PrivateKey& sk, uint32_t index){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return AugSchemeMPL().DeriveChildSk(sk, index);
         })
         .def("derive_child_sk_unhardened", [](const PrivateKey& sk, uint32_t index){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return AugSchemeMPL().DeriveChildSkUnhardened(sk, index);
         })
         .def("derive_child_pk_unhardened", [](const G1Element& pk, uint32_t index){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return AugSchemeMPL().DeriveChildPkUnhardened(pk, index);
         })
         .def("aggregate", [](const vector<G2Element>& signatures) {
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return AugSchemeMPL().Aggregate(signatures);
         })
         .def(
             "sign",
             [](const PrivateKey &pk, const py::bytes &msg) {
                 std::string s(msg);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 vector<uint8_t> v(s.begin(), s.end());
                 return AugSchemeMPL().Sign(pk, v);
             })
@@ -264,7 +282,7 @@ PYBIND11_MODULE(dashbls, m)
                const py::bytes &msg,
                const G1Element &prepend_pk) {
                 std::string s(msg);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 vector<uint8_t> v(s.begin(), s.end());
                 return AugSchemeMPL().Sign(pk, v, prepend_pk);
             })
@@ -274,7 +292,7 @@ PYBIND11_MODULE(dashbls, m)
                const py::bytes &msg,
                const G2Element &sig) {
                 std::string s(msg);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 vector<uint8_t> v(s.begin(), s.end());
                 return AugSchemeMPL().Verify(pk, v, sig);
             })
@@ -288,14 +306,14 @@ PYBIND11_MODULE(dashbls, m)
                     std::string s(msgs[i]);
                     vecs[i] = vector<uint8_t>(s.begin(), s.end());
                 }
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return AugSchemeMPL().AggregateVerify(pks, vecs, sig);
             })
         .def(
             "g2_from_message",
             [](const py::bytes &msg) {
                 const auto msg_str = std::string(msg);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 const auto msg_bytes = Bytes((const uint8_t *)msg_str.c_str(), msg_str.size());
                 return G2Element::FromMessage(
                     msg_bytes,
@@ -306,38 +324,38 @@ PYBIND11_MODULE(dashbls, m)
 
     py::class_<PopSchemeMPL>(m, "PopSchemeMPL")
         .def("sk_to_g1", [](const PrivateKey &seckey){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return PopSchemeMPL().SkToG1(seckey);
         })
         .def(
             "key_gen",
             [](const py::bytes &b) {
                 std::string str(b);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 const vector<uint8_t> inputVec(str.begin(), str.end());
                 return PopSchemeMPL().KeyGen(inputVec);
             })
         .def("derive_child_sk", [](const PrivateKey& sk, uint32_t index){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return PopSchemeMPL().DeriveChildSk(sk, index);
         })
         .def("derive_child_sk_unhardened", [](const PrivateKey& sk, uint32_t index){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return PopSchemeMPL().DeriveChildSkUnhardened(sk, index);
         })
         .def("derive_child_pk_unhardened", [](const G1Element& pk, uint32_t index){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return PopSchemeMPL().DeriveChildPkUnhardened(pk, index);
         })
         .def("aggregate", [](const vector<G2Element>& signatures) {
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return PopSchemeMPL().Aggregate(signatures);
         })
         .def(
             "sign",
             [](const PrivateKey &pk, const py::bytes &msg) {
                 std::string s(msg);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 vector<uint8_t> v(s.begin(), s.end());
                 return PopSchemeMPL().Sign(pk, v);
             })
@@ -347,7 +365,7 @@ PYBIND11_MODULE(dashbls, m)
                const py::bytes &msg,
                const G2Element &sig) {
                 std::string s(msg);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 vector<uint8_t> v(s.begin(), s.end());
                 return PopSchemeMPL().Verify(pk, v, sig);
             })
@@ -361,14 +379,14 @@ PYBIND11_MODULE(dashbls, m)
                     std::string s(msgs[i]);
                     vecs[i] = vector<uint8_t>(s.begin(), s.end());
                 }
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return PopSchemeMPL().AggregateVerify(pks, vecs, sig);
             })
         .def(
             "g2_from_message",
             [](const py::bytes &msg) {
                 const auto msg_str = std::string(msg);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 const auto msg_bytes = Bytes((const uint8_t *)msg_str.c_str(), msg_str.size());
                 return G2Element::FromMessage(
                     msg_bytes,
@@ -377,11 +395,11 @@ PYBIND11_MODULE(dashbls, m)
                 );
             })
         .def("pop_prove", [](const PrivateKey& privateKey){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return PopSchemeMPL().PopProve(privateKey);
         })
         .def("pop_verify", [](const G1Element& pubkey, const G2Element& signature){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return PopSchemeMPL().PopVerify(pubkey, signature);
         })
         .def(
@@ -390,7 +408,7 @@ PYBIND11_MODULE(dashbls, m)
                const py::bytes &msg,
                const G2Element &sig) {
                 std::string s(msg);
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 vector<uint8_t> v(s.begin(), s.end());
                 return PopSchemeMPL().FastAggregateVerify(pks, v, sig);
             });
@@ -399,10 +417,10 @@ PYBIND11_MODULE(dashbls, m)
         .def_property_readonly_static(
             "SIZE", [](py::object self) { return G1Element::SIZE; })
         .def(py::init([](){
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return G1Element();
         }))
-        .def(py::init(&G1Element::FromByteVector), py::call_guard<py::gil_scoped_release>())
+        .def(py::init(&G1Element::FromByteVector), py::call_guard<RelicGuard>())
         .def(py::init([](py::int_ pyint) {
             std::array<uint8_t, G1Element::SIZE> buffer{};
             if (PyLong_AsByteArray(
@@ -413,34 +431,35 @@ PYBIND11_MODULE(dashbls, m)
                     0) < 0) {
                 throw std::invalid_argument("Failed to cast int to G1Element");
             }
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return G1Element::FromBytes(buffer);
         }))
         .def(py::init([](py::buffer const b) {
             auto data = CopyBuffer<G1Element::SIZE>(b, "G1Element::SIZE");
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return G1Element::FromBytes(data);
         }))
         .def(
             "from_bytes",
             [](py::buffer const b) {
                 auto data = CopyBuffer<G1Element::SIZE>(b, "G1Element::SIZE");
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return G1Element::FromBytes(data);
             })
         .def(
             "from_bytes_unchecked",
             [](py::buffer const b) {
               auto data = CopyBuffer<G1Element::SIZE>(b, "G1Element::SIZE");
+              RelicGuard guard;
               return G1Element::FromBytesUnchecked(data);
             })
-        .def("generator", &G1Element::Generator)
+        .def("generator", &G1Element::Generator, py::call_guard<RelicGuard>())
         .def_static(
             "from_message",
             [](const py::bytes &msg, const py::bytes &dst) {
                 const auto msg_str = std::string(msg);
                 const auto dst_str = CopyDst(dst, "G1Element.from_message");
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return G1Element::FromMessage(
                     Bytes((const uint8_t *)msg_str.c_str(), msg_str.size()),
                     (const uint8_t *)dst_str.c_str(),
@@ -448,49 +467,50 @@ PYBIND11_MODULE(dashbls, m)
             },
             py::arg("msg"),
             py::arg("dst"))
-        .def("pair", &G1Element::Pair, py::call_guard<py::gil_scoped_release>())
-        .def("negate", &G1Element::Negate, py::call_guard<py::gil_scoped_release>())
-        .def("get_fingerprint", &G1Element::GetFingerprint, py::call_guard<py::gil_scoped_release>())
+        .def("pair", &G1Element::Pair, py::call_guard<RelicGuard>())
+        .def("negate", &G1Element::Negate, py::call_guard<RelicGuard>())
+        .def("get_fingerprint", &G1Element::GetFingerprint, py::call_guard<RelicGuard>())
 
-        .def(py::self == py::self)
-        .def(py::self != py::self)
+        .def(py::self == py::self, py::call_guard<RelicGuard>())
+        .def(py::self != py::self, py::call_guard<RelicGuard>())
         .def(
             "__deepcopy__",
             [](const G1Element &g1, const py::object &memo) {
+                RelicGuard guard;
                 return G1Element(g1);
             })
         .def(
             "__add__",
             [](G1Element &self, G1Element &other) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return self + other;
             },
             py::is_operator())
         .def(
             "__mul__",
             [](G1Element &self, const PrivateKey &other) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return self * other;
             },
             py::is_operator())
         .def(
             "__rmul__",
             [](G1Element &self, const PrivateKey &other) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return other * self;
             },
             py::is_operator())
         .def(
             "__and__",
             [](G1Element &self, G2Element &other) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return self & other;
             },
             py::is_operator())
         .def(
             "__repr__",
             [](const G1Element &ele) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 std::stringstream s;
                 s << ele;
                 return "<G1Element " + s.str() + ">";
@@ -498,7 +518,7 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "__str__",
             [](const G1Element &ele) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 std::stringstream s;
                 s << ele;
                 return s.str();
@@ -508,7 +528,7 @@ PYBIND11_MODULE(dashbls, m)
             [](const G1Element &ele) {
                 vector<uint8_t> out;
                 {
-                    py::gil_scoped_release release;
+                    RelicGuard guard;
                     out = ele.Serialize();
                 }
                 py::bytes ans = py::bytes(
@@ -516,6 +536,7 @@ PYBIND11_MODULE(dashbls, m)
                 return ans;
             })
         .def("__deepcopy__", [](const G1Element &ele, const py::object &memo) {
+            RelicGuard guard;
             return G1Element(ele);
         });
 
@@ -523,12 +544,13 @@ PYBIND11_MODULE(dashbls, m)
         .def_property_readonly_static(
             "SIZE", [](py::object self) { return G2Element::SIZE; })
         .def(py::init([](){
+            RelicGuard guard;
             return G2Element();
         }))
-        .def(py::init(&G2Element::FromByteVector), py::call_guard<py::gil_scoped_release>())
+        .def(py::init(&G2Element::FromByteVector), py::call_guard<RelicGuard>())
         .def(py::init([](py::buffer const b) {
             auto data = CopyBuffer<G2Element::SIZE>(b, "G2Element::SIZE");
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return G2Element::FromBytes(data);
         }))
         .def(py::init([](py::int_ pyint) {
@@ -541,29 +563,30 @@ PYBIND11_MODULE(dashbls, m)
                     0) < 0) {
                 throw std::invalid_argument("Failed to cast int to G2Element");
             }
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return G2Element::FromBytes(buffer);
         }))
         .def(
             "from_bytes",
             [](py::buffer const b) {
                 auto data = CopyBuffer<G2Element::SIZE>(b, "G2Element::SIZE");
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return G2Element::FromBytes(data);
             })
         .def(
             "from_bytes_unchecked",
             [](py::buffer const b) {
               auto data = CopyBuffer<G2Element::SIZE>(b, "G2Element::SIZE");
+              RelicGuard guard;
               return G2Element::FromBytesUnchecked(data);
             })
-        .def("generator", &G2Element::Generator)
+        .def("generator", &G2Element::Generator, py::call_guard<RelicGuard>())
         .def_static(
             "from_message",
             [](const py::bytes &msg, const py::bytes &dst) {
                 const auto msg_str = std::string(msg);
                 const auto dst_str = CopyDst(dst, "G2Element.from_message");
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return G2Element::FromMessage(
                     Bytes((const uint8_t *)msg_str.c_str(), msg_str.size()),
                     (const uint8_t *)dst_str.c_str(),
@@ -571,34 +594,35 @@ PYBIND11_MODULE(dashbls, m)
             },
             py::arg("msg"),
             py::arg("dst"))
-        .def("pair", &G2Element::Pair, py::call_guard<py::gil_scoped_release>())
-        .def("negate", &G2Element::Negate, py::call_guard<py::gil_scoped_release>())
+        .def("pair", &G2Element::Pair, py::call_guard<RelicGuard>())
+        .def("negate", &G2Element::Negate, py::call_guard<RelicGuard>())
         .def(
             "__deepcopy__",
             [](const G2Element &g2, const py::object &memo) {
+                RelicGuard guard;
                 return G2Element(g2);
             })
-        .def(py::self == py::self)
-        .def(py::self != py::self)
+        .def(py::self == py::self, py::call_guard<RelicGuard>())
+        .def(py::self != py::self, py::call_guard<RelicGuard>())
 
         .def(
             "__add__",
             [](G2Element &self, G2Element &other) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return self + other;
             },
             py::is_operator())
         .def(
             "__mul__",
             [](G2Element &self, const PrivateKey &other) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return self * other;
             },
             py::is_operator())
         .def(
             "__rmul__",
             [](G2Element &self, const PrivateKey &other) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return other * self;
             },
             py::is_operator())
@@ -606,7 +630,7 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "__repr__",
             [](const G2Element &ele) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 std::stringstream s;
                 s << ele;
                 return "<G2Element " + s.str() + ">";
@@ -614,7 +638,7 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "__str__",
             [](const G2Element &ele) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 std::stringstream s;
                 s << ele;
                 return s.str();
@@ -624,7 +648,7 @@ PYBIND11_MODULE(dashbls, m)
             [](const G2Element &ele) {
                 vector<uint8_t> out;
                 {
-                    py::gil_scoped_release release;
+                    RelicGuard guard;
                     out = ele.Serialize();
                 }
                 py::bytes ans = py::bytes(
@@ -632,16 +656,17 @@ PYBIND11_MODULE(dashbls, m)
                 return ans;
             })
         .def("__deepcopy__", [](const G2Element &ele, const py::object &memo) {
+            RelicGuard guard;
             return G2Element(ele);
         });
 
     py::class_<GTElement>(m, "GTElement")
         .def_property_readonly_static(
             "SIZE", [](py::object self) { return GTElement::SIZE; })
-        .def(py::init(&GTElement::FromByteVector), py::call_guard<py::gil_scoped_release>())
+        .def(py::init(&GTElement::FromByteVector), py::call_guard<RelicGuard>())
         .def(py::init([](py::buffer const b) {
             auto data = CopyBuffer<GTElement::SIZE>(b, "GTElement::SIZE");
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return GTElement::FromBytes(data);
         }))
         .def(py::init([](py::int_ pyint) {
@@ -654,35 +679,36 @@ PYBIND11_MODULE(dashbls, m)
                     0) < 0) {
                 throw std::invalid_argument("Failed to cast int to GTElement");
             }
-            py::gil_scoped_release release;
+            RelicGuard guard;
             return GTElement::FromBytes(buffer);
         }))
         .def(
             "from_bytes",
             [](py::buffer const b) {
                 auto data = CopyBuffer<GTElement::SIZE>(b, "GTElement::SIZE");
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return GTElement::FromBytes(data);
             })
         .def(
             "from_bytes_unchecked",
             [](py::buffer const b) {
                 auto data = CopyBuffer<GTElement::SIZE>(b, "GTElement::SIZE");
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return GTElement::FromBytesUnchecked(data);
             })
-        .def("unity", &GTElement::Unity)
-        .def(py::self == py::self)
-        .def(py::self != py::self)
+        .def("unity", &GTElement::Unity, py::call_guard<RelicGuard>())
+        .def(py::self == py::self, py::call_guard<RelicGuard>())
+        .def(py::self != py::self, py::call_guard<RelicGuard>())
         .def(
             "__deepcopy__",
             [](const GTElement &gt, const py::object &memo) {
+                RelicGuard guard;
                 return GTElement(gt);
             })
         .def(
             "__repr__",
             [](const GTElement &ele) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 std::stringstream s;
                 s << ele;
                 return "<GTElement " + s.str() + ">";
@@ -690,7 +716,7 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "__str__",
             [](const GTElement &ele) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 std::stringstream s;
                 s << ele;
                 return s.str();
@@ -700,7 +726,7 @@ PYBIND11_MODULE(dashbls, m)
             [](const GTElement &ele) {
                 uint8_t *out = new uint8_t[GTElement::SIZE];
                 {
-                    py::gil_scoped_release release;
+                    RelicGuard guard;
                     ele.Serialize(out);
                 }
                 py::bytes ans =
@@ -711,11 +737,12 @@ PYBIND11_MODULE(dashbls, m)
         .def(
             "__mul__",
             [](GTElement &self, GTElement &other) {
-                py::gil_scoped_release release;
+                RelicGuard guard;
                 return self * other;
             },
             py::is_operator())
         .def("__deepcopy__", [](const GTElement &ele, const py::object &memo) {
+            RelicGuard guard;
             return GTElement(ele);
         });
 
