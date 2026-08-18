@@ -287,7 +287,7 @@ build_relic_arch() {
 
 build_bls_arch() {
     # shellcheck disable=SC2039
-    BLS_FILES=( "bls" "chaincode" "elements" "extendedprivatekey" "extendedpublickey" "legacy" "privatekey" "schemes" "threshold" )
+    BLS_FILES=( "bls" "chaincode" "elements" "extendedprivatekey" "extendedpublickey" "hdkeys" "hkdf" "legacy" "privatekey" "schemes" "threshold" "util" )
     # shellcheck disable=SC2039
     ALL_BLS_OBJ_FILES=$(printf "%s.o " "${BLS_FILES[@]}")
 

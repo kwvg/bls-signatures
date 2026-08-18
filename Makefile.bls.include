@@ -33,10 +33,13 @@ libdashbls_la_SOURCES = \
 	src/elements.cpp \
 	src/extendedprivatekey.cpp \
 	src/extendedpublickey.cpp \
+	src/hdkeys.cpp \
+	src/hkdf.cpp \
 	src/legacy.cpp \
 	src/privatekey.cpp \
 	src/schemes.cpp \
-	src/threshold.cpp
+	src/threshold.cpp \
+	src/util.cpp
 
 libdashbls_la_SOURCES += \
 	$(DASHBLS_H) \
