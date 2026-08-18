@@ -13,6 +13,7 @@ add_library(dashbls
   ${CMAKE_CURRENT_SOURCE_DIR}/legacy.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/privatekey.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/schemes.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/secure.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/threshold.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/util.cpp
 )

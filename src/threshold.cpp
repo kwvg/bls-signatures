@@ -7,7 +7,7 @@
 #include "threshold.hpp"
 
 #include "schemes.hpp"
-#include "bn_helpers.hpp"
+#include "secure.h"
 
 static std::unique_ptr<bls::CoreMPL> pThresholdScheme(new bls::LegacySchemeMPL);
 

@@ -21,7 +21,7 @@
 #include "elements.hpp"
 #include "schemes.hpp"
 #include "hdkeys.hpp"
-#include "bn_helpers.hpp"
+#include "secure.h"
 
 using std::string;
 using std::vector;

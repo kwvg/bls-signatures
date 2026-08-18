@@ -38,6 +38,8 @@ libdashbls_la_SOURCES = \
 	src/legacy.cpp \
 	src/privatekey.cpp \
 	src/schemes.cpp \
+	src/secure.cpp \
+	src/secure.h \
 	src/threshold.cpp \
 	src/util.cpp
 
