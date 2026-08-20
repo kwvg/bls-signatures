@@ -12,11 +12,13 @@ RUNTEST_H = \
 	depends/catch2/include/catch2/catch.hpp
 
 runtest_SOURCES = \
+	include/dashbls/test-utils.hpp \
+	src/test.cpp
+
+runtest_SOURCES += \
 	$(DASHBLS_H) \
 	$(RELIC_H) \
-	$(RUNTEST_H) \
-	src/test.cpp \
-	src/test-utils.hpp
+	$(RUNTEST_H)
 
 runtest_CPPFLAGS = $(AM_CPPFLAGS) $(DASHBLS_INCLUDES) $(RELIC_INCLUDES) $(RUNTEST_INCLUDES)
 runtest_CXXFLAGS = $(AM_CXXFLAGS)

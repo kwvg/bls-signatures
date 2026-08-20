@@ -315,7 +315,7 @@ build_bls_arch() {
           -I"../relic-${PFX}/depends/relic/include" \
           -I"../../src/" \
           -I"../gmplib-${PFX}/include" \
-          -x c++ -std=c++14 -stdlib=libc++ -fembed-bitcode -arch "${ARCH}" -isysroot "${SDK}" "${EXTRA_ARGS}" \
+          -x c++ -std=c++17 -stdlib=libc++ -fembed-bitcode -arch "${ARCH}" -isysroot "${SDK}" "${EXTRA_ARGS}" \
           -c "../../src/${F}.cpp" -o "${F}.o"
     done
 
