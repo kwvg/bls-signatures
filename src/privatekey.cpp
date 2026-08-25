@@ -14,9 +14,9 @@
 
 #include "bls.hpp"
 #include "legacy.hpp"
+#include "secure.h"
 
 namespace bls {
-
 const size_t PrivateKey::PRIVATE_KEY_SIZE;
 
 PrivateKey PrivateKey::FromSeedBIP32(const Bytes& seed) {
@@ -30,20 +30,17 @@ PrivateKey PrivateKey::FromSeedBIP32(const Bytes& seed) {
     // Hash the seed into sk
     md_hmac(hash, seed.begin(), (int)seed.size(), hmacKey, sizeof(hmacKey));
 
-    bn_t order;
-    bn_new(order);
+    util::Bn order;
     g1_get_ord(order);
 
     // Make sure private key is less than the curve order
-    bn_t* skBn = Util::SecAlloc<bn_t>(1);
-    bn_new(*skBn);
-    bn_read_bin(*skBn, hash, PrivateKey::PRIVATE_KEY_SIZE);
-    bn_mod_basic(*skBn, *skBn, order);
+    util::Bn skBn;
+    bn_read_bin(skBn, hash, PrivateKey::PRIVATE_KEY_SIZE);
+    bn_mod_basic(skBn, skBn, order);
 
     PrivateKey k;
-    bn_copy(k.keydata, *skBn);
+    bn_copy(k.keydata, skBn);
 
-    Util::SecFree(skBn);
     Util::SecFree(hash);
     return k;
 }
@@ -57,8 +54,7 @@ PrivateKey PrivateKey::FromBytes(const Bytes& bytes, bool modOrder)
 
     PrivateKey k;
     bn_read_bin(k.keydata, bytes.begin(), PrivateKey::PRIVATE_KEY_SIZE);
-    bn_t ord;
-    bn_new(ord);
+    util::Bn ord;
     g1_get_ord(ord);
     if (modOrder) {
         bn_mod_basic(k.keydata, k.keydata, ord);
@@ -80,16 +76,13 @@ PrivateKey PrivateKey::FromByteVector(const std::vector<uint8_t> bytes, bool mod
 // Construct a private key from a bytearray.
 PrivateKey PrivateKey::RandomPrivateKey()
 {
-    bn_t *r = Util::SecAlloc<bn_t>(1);
-    bn_new(*r);
-    bn_rand(*r, RLC_POS, 256);
+    util::Bn r;
+    bn_rand(r, RLC_POS, 256);
     PrivateKey k;
-    bn_copy(k.keydata, *r);
-    bn_t ord;
-    bn_new(ord);
+    bn_copy(k.keydata, r);
+    util::Bn ord;
     g1_get_ord(ord);
     bn_mod_basic(k.keydata, k.keydata, ord);
-    Util::SecFree(r);
     return k;
 }
 
@@ -210,8 +203,7 @@ G2Element operator*(const PrivateKey &k, const G2Element &a) { return a * k; }
 PrivateKey operator*(const PrivateKey& k, const bn_t& a)
 {
     k.CheckKeyData();
-    bn_t order;
-    bn_new(order);
+    util::Bn order;
     g2_get_ord(order);
 
     PrivateKey ret;
@@ -240,8 +232,7 @@ PrivateKey PrivateKey::Aggregate(std::vector<PrivateKey> const &privateKeys)
         throw std::length_error("Number of private keys must be at least 1");
     }
 
-    bn_t order;
-    bn_new(order);
+    util::Bn order;
     g1_get_ord(order);
 
     PrivateKey ret;
@@ -330,5 +321,4 @@ void PrivateKey::CheckKeyData() const
         throw std::runtime_error("PrivateKey::CheckKeyData keydata not initialized");
     }
 }
-
 }  // end namespace bls

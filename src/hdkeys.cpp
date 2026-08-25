@@ -3,6 +3,7 @@
 // file COPYING.MIT or https://opensource.org/license/MIT
 
 #include "hdkeys.hpp"
+#include "secure.h"
 
 namespace bls {
 PrivateKey HDKeys::KeyGen(const std::vector<uint8_t>& seed)
@@ -55,23 +56,20 @@ PrivateKey HDKeys::KeyGen(const Bytes& seed)
         keyInfoHkdf,
         infoLen + 2);
 
-    bn_t order;
-    bn_new(order);
+    util::Bn order;
     g1_get_ord(order);
 
     // Make sure private key is less than the curve order
-    bn_t *skBn = Util::SecAlloc<bn_t>(1);
-    bn_new(*skBn);
-    bn_read_bin(*skBn, okmHkdf, L);
-    bn_mod_basic(*skBn, *skBn, order);
+    util::Bn skBn;
+    bn_read_bin(skBn, okmHkdf, L);
+    bn_mod_basic(skBn, skBn, order);
 
     uint8_t *skBytes = Util::SecAlloc<uint8_t>(32);
-    bn_write_bin(skBytes, 32, *skBn);
+    bn_write_bin(skBytes, 32, skBn);
     PrivateKey k = PrivateKey::FromBytes(Bytes(skBytes, 32));
 
     Util::SecFree(prk);
     Util::SecFree(ikmHkdf);
-    Util::SecFree(skBn);
     Util::SecFree(okmHkdf);
     Util::SecFree(skBytes);
 
@@ -151,11 +149,9 @@ G1Element HDKeys::DeriveChildG1Unhardened(const G1Element& pk, uint32_t index) {
     Util::IntToFourBytes(buf + G1Element::SIZE, index);
     Util::Hash256(digest, buf, G1Element::SIZE + 4);
 
-    bn_t nonce, ord;
-    bn_new(nonce);
-    bn_zero(nonce);
+    util::Bn nonce;
+    util::Bn ord;
     bn_read_bin(nonce, digest, HASH_LEN);
-    bn_new(ord);
     g1_get_ord(ord);
     bn_mod_basic(nonce, nonce, ord);
 
@@ -173,11 +169,9 @@ G2Element HDKeys::DeriveChildG2Unhardened(const G2Element& pk, uint32_t index) {
     Util::IntToFourBytes(buf + G2Element::SIZE, index);
     Util::Hash256(digest, buf, G2Element::SIZE + 4);
 
-    bn_t nonce, ord;
-    bn_new(nonce);
-    bn_zero(nonce);
+    util::Bn nonce;
+    util::Bn ord;
     bn_read_bin(nonce, digest, HASH_LEN);
-    bn_new(ord);
     g1_get_ord(ord);
     bn_mod_basic(nonce, nonce, ord);
 

@@ -3,25 +3,37 @@
 // file COPYING.MIT or https://opensource.org/license/MIT
 
 #include "secure.h"
+#include "util.hpp"
+
+#include <utility>
 
 namespace bls {
-BnArrayGuard::BnArrayGuard(size_t n) : data(new bn_t[n]), count(n)
+namespace util {
+Bn::Bn()
 {
-    for (size_t i = 0; i < count; i++) {
-        bn_new(data[i]);
-        initialized++;
-    }
+    bn_null(m_val);
+    bn_new(m_val);
+    bn_zero(m_val);
 }
 
-BnArrayGuard::~BnArrayGuard()
+Bn::~Bn()
 {
-    for (size_t i = 0; i < initialized; i++) {
-        bn_free(data[i]);
-    }
-    delete[] data;
+    SecureWipe(m_val, sizeof(bn_st));
+    bn_free(m_val);
 }
 
-BnGuard::BnGuard() { bn_new(val); }
+Bn::Bn(Bn&& other) noexcept : Bn() { *this = std::move(other); }
 
-BnGuard::~BnGuard() { bn_free(val); }
+Bn& Bn::operator=(Bn&& other) noexcept
+{
+    if (this != &other) {
+        SecureWipe(m_val->dp, sizeof(m_val->dp));
+        bn_copy(m_val, other.m_val);
+        SecureWipe(other.m_val, sizeof(bn_st));
+        bn_new(other.m_val);
+        bn_zero(other.m_val);
+    }
+    return *this;
+}
+} // namespace util
 } // namespace bls

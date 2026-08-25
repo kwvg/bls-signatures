@@ -15,6 +15,7 @@ add_library(dashbls
   ${CMAKE_CURRENT_SOURCE_DIR}/schemes.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/secure.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/threshold.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/wipe.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/util.cpp
 )
 
@@ -47,7 +48,9 @@ install(FILES $<TARGET_FILE:dashbls> DESTINATION lib)
 if(BUILD_BLS_TESTS)
   include(${CMAKE_CURRENT_SOURCE_DIR}/../depends/catch2/CMakeLists.txt)
 
-  add_executable(runtest test.cpp)
+  add_executable(runtest
+    ${CMAKE_CURRENT_SOURCE_DIR}/test.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../test/test_secure.cpp)
   target_link_libraries(runtest
                         PRIVATE dashbls
                         PRIVATE catch2)

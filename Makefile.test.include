@@ -6,14 +6,16 @@
 DASHBLS_RUNTEST = runtest
 
 RUNTEST_INCLUDES = \
-	-I$(top_srcdir)/depends/catch2/include
+	-I$(top_srcdir)/depends/catch2/include \
+	-I$(top_srcdir)/src
 
 RUNTEST_H = \
 	depends/catch2/include/catch2/catch.hpp
 
 runtest_SOURCES = \
 	include/dashbls/test-utils.hpp \
-	src/test.cpp
+	src/test.cpp \
+	test/test_secure.cpp
 
 runtest_SOURCES += \
 	$(DASHBLS_H) \

@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <cstring>
 #include "bls.hpp"
+#include "secure.h"
+
+#include <cstring>
 
 namespace bls {
-
 ExtendedPrivateKey ExtendedPrivateKey::FromSeed(const Bytes& bytes) {
     // "BLS HD seed" in ascii
     const uint8_t prefix[] = {66, 76, 83, 32, 72, 68, 32, 115, 101, 101, 100};
@@ -37,21 +38,18 @@ ExtendedPrivateKey ExtendedPrivateKey::FromSeed(const Bytes& bytes) {
     md_hmac(IRight, hashInput, bytes.size() + 1, prefix, sizeof(prefix));
 
     // Make sure private key is less than the curve order
-    bn_t* skBn = Util::SecAlloc<bn_t>(1);
-    bn_t order;
-    bn_new(order);
+    util::Bn skBn;
+    util::Bn order;
     g1_get_ord(order);
 
-    bn_new(*skBn);
-    bn_read_bin(*skBn, ILeft, PrivateKey::PRIVATE_KEY_SIZE);
-    bn_mod_basic(*skBn, *skBn, order);
-    bn_write_bin(ILeft, PrivateKey::PRIVATE_KEY_SIZE, *skBn);
+    bn_read_bin(skBn, ILeft, PrivateKey::PRIVATE_KEY_SIZE);
+    bn_mod_basic(skBn, skBn, order);
+    bn_write_bin(ILeft, PrivateKey::PRIVATE_KEY_SIZE, skBn);
 
     ExtendedPrivateKey esk(ExtendedPublicKey::REVISION, 0, 0, 0,
                            ChainCode::FromBytes(Bytes(IRight, ChainCode::SIZE)),
                            PrivateKey::FromBytes(Bytes(ILeft, PrivateKey::PRIVATE_KEY_SIZE)));
 
-    Util::SecFree(skBn);
     Util::SecFree(ILeft);
     Util::SecFree(hashInput);
     return esk;
@@ -197,4 +195,4 @@ std::vector<uint8_t> ExtendedPrivateKey::Serialize() const {
 
 // Destructors in PrivateKey and ChainCode handle cleaning of memory
 ExtendedPrivateKey::~ExtendedPrivateKey() {}
-} // end namespace bls
+} // namespace bls

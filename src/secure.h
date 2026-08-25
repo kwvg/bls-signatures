@@ -5,6 +5,8 @@
 #ifndef DASHBLS_SECURE_H
 #define DASHBLS_SECURE_H
 
+#include "wipe.h"
+
 #include "relic_conf.h"
 
 #if defined GMP && ARITH == GMP
@@ -17,42 +19,60 @@ extern "C" {
 
 #include <cstddef>
 
+// BLS::Init refuses to run unless relic was built ALLOC=AUTO, which puts
+// bn_st's digits inline rather than behind a pointer. That inline storage is
+// what gets wiped, so catch a mismatch here rather than wipe the wrong bytes.
+#if !defined(ALLOC) || !defined(AUTO) || ALLOC != AUTO
+#error "secure.h assumes relic is built with ALLOC == AUTO"
+#endif
+
 namespace bls {
+namespace util {
 /**
- * RAII wrapper for a dynamically allocated array of bn_t.
+ * An owning relic bn_t that clears itself when destroyed.
  *
- * Ensures bn_free and delete[] run even when an exception is thrown, and
- * tracks how many were initialised so partial construction still cleans up.
+ * Constructing one initialises it, which relic requires before any use.
+ * Destroying one clears the whole bn_st, so a value that was a secret does not
+ * outlive its scope, and the used and sign fields do not survive either.
  */
-struct BnArrayGuard {
-    bn_t* data;
-    size_t count;
-    size_t initialized{0};
+class Bn {
+public:
+    Bn();
+    ~Bn();
 
-    explicit BnArrayGuard(size_t n);
-    ~BnArrayGuard();
+    Bn(const Bn&) = delete;
+    Bn& operator=(const Bn&) = delete;
 
-    bn_t& operator[](size_t i) { return data[i]; }
-    const bn_t& operator[](size_t i) const { return data[i]; }
+    /**
+     * Takes over another's value, leaving it cleared and zero.
+     *
+     * Move-only, so a secret is never silently duplicated. The digits are
+     * inline under ALLOC=AUTO, so there is no buffer to steal, and the value is
+     * copied and the source cleared.
+     */
+    Bn(Bn&& other) noexcept;
+    Bn& operator=(Bn&& other) noexcept;
 
-    BnArrayGuard(const BnArrayGuard&) = delete;
-    BnArrayGuard& operator=(const BnArrayGuard&) = delete;
+    /**
+     * Converts to the underlying bn_t.
+     *
+     * @returns A reference that relic entry points taking a bn_t accept.
+     */
+    operator bn_t&() { return m_val; }
+    operator const bn_t&() const { return m_val; }
+
+    /**
+     * Names the conversion, for where a bn_t is not deduced.
+     *
+     * @returns A reference to the underlying bn_t.
+     */
+    bn_t& native() { return m_val; }
+    const bn_t& native() const { return m_val; }
+
+private:
+    bn_t m_val;
 };
-
-/**
- * RAII wrapper for a single bn_t value.
- */
-struct BnGuard {
-    bn_t val;
-
-    BnGuard();
-    ~BnGuard();
-
-    operator bn_t&() { return val; }
-
-    BnGuard(const BnGuard&) = delete;
-    BnGuard& operator=(const BnGuard&) = delete;
-};
+} // namespace util
 } // namespace bls
 
 #endif // DASHBLS_SECURE_H

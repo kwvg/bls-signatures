@@ -41,6 +41,8 @@ libdashbls_la_SOURCES = \
 	src/secure.cpp \
 	src/secure.h \
 	src/threshold.cpp \
+	src/wipe.cpp \
+	src/wipe.h \
 	src/util.cpp
 
 libdashbls_la_SOURCES += \
