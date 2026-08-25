@@ -24,24 +24,23 @@ PrivateKey PrivateKey::FromSeedBIP32(const Bytes& seed) {
     const uint8_t hmacKey[] = {66, 76, 83, 32, 112, 114, 105, 118, 97, 116, 101,
                                32, 107, 101, 121, 32, 115, 101, 101, 100};
 
-    auto* hash = util::SecAlloc<uint8_t>(
-        PrivateKey::PRIVATE_KEY_SIZE);
+    util::SecVector<uint8_t> hash(PrivateKey::PRIVATE_KEY_SIZE);
 
     // Hash the seed into sk
-    md_hmac(hash, seed.begin(), (int)seed.size(), hmacKey, sizeof(hmacKey));
+    md_hmac(hash.data(), seed.begin(), (int)seed.size(), hmacKey,
+            sizeof(hmacKey));
 
     util::Bn order;
     g1_get_ord(order);
 
     // Make sure private key is less than the curve order
     util::Bn skBn;
-    bn_read_bin(skBn, hash, PrivateKey::PRIVATE_KEY_SIZE);
+    bn_read_bin(skBn, hash.data(), PrivateKey::PRIVATE_KEY_SIZE);
     bn_mod_basic(skBn, skBn, order);
 
     PrivateKey k;
     bn_copy(k.keydata, skBn);
 
-    util::SecFree(hash, PrivateKey::PRIVATE_KEY_SIZE);
     return k;
 }
 
