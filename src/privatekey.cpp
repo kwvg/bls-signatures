@@ -127,13 +127,20 @@ PrivateKey& PrivateKey::operator=(const PrivateKey& other)
 {
     CheckKeyData();
     other.CheckKeyData();
+    if (this == &other) {
+        return *this;
+    }
     InvalidateCaches();
+    util::SecureWipe(keydata->dp, sizeof(keydata->dp));
     bn_copy(keydata, other.keydata);
     return *this;
 }
 
 PrivateKey& PrivateKey::operator=(PrivateKey&& other)
 {
+    if (this == &other) {
+        return *this;
+    }
     DeallocateKeyData();
     keydata = std::exchange(other.keydata, nullptr);
     other.InvalidateCaches();
