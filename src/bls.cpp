@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "bls.hpp"
+#include "secure.h"
 
 #if BLSALLOC_MIMALLOC
 #include "mimalloc.h"
@@ -23,9 +24,6 @@ namespace bls {
 const size_t BLS::MESSAGE_HASH_LEN;
 
 bool BLSInitResult = BLS::Init();
-
-Util::SecureAllocCallback Util::secureAllocCallback;
-Util::SecureFreeCallback Util::secureFreeCallback;
 
 static void relic_core_initializer(void* ptr)
 {
@@ -64,8 +62,7 @@ void BLS::SetSecureAllocator(
     Util::SecureAllocCallback allocCb,
     Util::SecureFreeCallback freeCb)
 {
-    Util::secureAllocCallback = allocCb;
-    Util::secureFreeCallback = freeCb;
+    util::SetSecureAllocator(allocCb, freeCb);
 }
 
 

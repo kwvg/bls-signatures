@@ -31,15 +31,15 @@ PrivateKey HDKeys::KeyGen(const Bytes& seed)
     const uint8_t saltHkdf[20] = {66, 76, 83, 45, 83, 73, 71, 45, 75, 69,
                                 89, 71, 69, 78, 45, 83, 65, 76, 84, 45};
 
-    uint8_t *prk = Util::SecAlloc<uint8_t>(32);
-    uint8_t *ikmHkdf = Util::SecAlloc<uint8_t>(seed.size() + 1);
+    uint8_t *prk = util::SecAlloc<uint8_t>(32);
+    uint8_t *ikmHkdf = util::SecAlloc<uint8_t>(seed.size() + 1);
     memcpy(ikmHkdf, seed.begin(), seed.size());
     ikmHkdf[seed.size()] = 0;
 
     const uint8_t L = 48;  // `ceil((3 * ceil(log2(r))) / 16)`, where `r` is the
                         // order of the BLS 12-381 curve
 
-    uint8_t *okmHkdf = Util::SecAlloc<uint8_t>(L);
+    uint8_t *okmHkdf = util::SecAlloc<uint8_t>(L);
 
     uint8_t keyInfoHkdf[infoLen + 2];
     memcpy(keyInfoHkdf, info, infoLen);
@@ -64,14 +64,14 @@ PrivateKey HDKeys::KeyGen(const Bytes& seed)
     bn_read_bin(skBn, okmHkdf, L);
     bn_mod_basic(skBn, skBn, order);
 
-    uint8_t *skBytes = Util::SecAlloc<uint8_t>(32);
+    uint8_t *skBytes = util::SecAlloc<uint8_t>(32);
     bn_write_bin(skBytes, 32, skBn);
     PrivateKey k = PrivateKey::FromBytes(Bytes(skBytes, 32));
 
-    Util::SecFree(prk);
-    Util::SecFree(ikmHkdf);
-    Util::SecFree(okmHkdf);
-    Util::SecFree(skBytes);
+    util::SecFree(prk, 32);
+    util::SecFree(ikmHkdf, seed.size() + 1);
+    util::SecFree(okmHkdf, L);
+    util::SecFree(skBytes, 32);
 
     return k;
 }
@@ -83,11 +83,11 @@ void HDKeys::IKMToLamportSk(uint8_t* outputLamportSk, const uint8_t* ikm, size_t
 }
 
 void HDKeys::ParentSkToLamportPK(uint8_t* outputLamportPk, const PrivateKey& parentSk, uint32_t index) {
-    uint8_t* salt = Util::SecAlloc<uint8_t>(4);
-    uint8_t* ikm = Util::SecAlloc<uint8_t>(HASH_LEN);
-    uint8_t* notIkm = Util::SecAlloc<uint8_t>(HASH_LEN);
-    uint8_t* lamport0 = Util::SecAlloc<uint8_t>(HASH_LEN * 255);
-    uint8_t* lamport1 = Util::SecAlloc<uint8_t>(HASH_LEN * 255);
+    uint8_t* salt = util::SecAlloc<uint8_t>(4);
+    uint8_t* ikm = util::SecAlloc<uint8_t>(HASH_LEN);
+    uint8_t* notIkm = util::SecAlloc<uint8_t>(HASH_LEN);
+    uint8_t* lamport0 = util::SecAlloc<uint8_t>(HASH_LEN * 255);
+    uint8_t* lamport1 = util::SecAlloc<uint8_t>(HASH_LEN * 255);
 
     Util::IntToFourBytes(salt, index);
     parentSk.Serialize(ikm);
@@ -99,7 +99,7 @@ void HDKeys::ParentSkToLamportPK(uint8_t* outputLamportPk, const PrivateKey& par
     HDKeys::IKMToLamportSk(lamport0, ikm, HASH_LEN, salt, 4);
     HDKeys::IKMToLamportSk(lamport1, notIkm, HASH_LEN, salt, 4);
 
-    uint8_t* lamportPk = Util::SecAlloc<uint8_t>(HASH_LEN * 255 * 2);
+    uint8_t* lamportPk = util::SecAlloc<uint8_t>(HASH_LEN * 255 * 2);
 
     for (size_t i = 0; i < 255; i++) {
         Util::Hash256(lamportPk + i * HASH_LEN, lamport0 + i * HASH_LEN, HASH_LEN);
@@ -110,40 +110,40 @@ void HDKeys::ParentSkToLamportPK(uint8_t* outputLamportPk, const PrivateKey& par
     }
     Util::Hash256(outputLamportPk, lamportPk, HASH_LEN * 255 * 2);
 
-    Util::SecFree(salt);
-    Util::SecFree(ikm);
-    Util::SecFree(notIkm);
-    Util::SecFree(lamport0);
-    Util::SecFree(lamport1);
-    Util::SecFree(lamportPk);
+    util::SecFree(salt, 4);
+    util::SecFree(ikm, HASH_LEN);
+    util::SecFree(notIkm, HASH_LEN);
+    util::SecFree(lamport0, HASH_LEN * 255);
+    util::SecFree(lamport1, HASH_LEN * 255);
+    util::SecFree(lamportPk, HASH_LEN * 255 * 2);
 }
 
 PrivateKey HDKeys::DeriveChildSk(const PrivateKey& parentSk, uint32_t index) {
-    uint8_t* lamportPk = Util::SecAlloc<uint8_t>(HASH_LEN);
+    uint8_t* lamportPk = util::SecAlloc<uint8_t>(HASH_LEN);
     HDKeys::ParentSkToLamportPK(lamportPk, parentSk, index);
     std::vector<uint8_t> lamportPkVector(lamportPk, lamportPk + HASH_LEN);
     PrivateKey child = HDKeys::KeyGen(lamportPkVector);
-    Util::SecFree(lamportPk);
+    util::SecFree(lamportPk, HASH_LEN);
     return child;
 }
 
 PrivateKey HDKeys::DeriveChildSkUnhardened(const PrivateKey& parentSk, uint32_t index) {
-    uint8_t* buf = Util::SecAlloc<uint8_t>(G1Element::SIZE + 4);
-    uint8_t* digest = Util::SecAlloc<uint8_t>(HASH_LEN);
+    uint8_t* buf = util::SecAlloc<uint8_t>(G1Element::SIZE + 4);
+    uint8_t* digest = util::SecAlloc<uint8_t>(HASH_LEN);
     memcpy(buf, parentSk.GetG1Element().Serialize().data(), G1Element::SIZE);
     Util::IntToFourBytes(buf + G1Element::SIZE, index);
     Util::Hash256(digest, buf, G1Element::SIZE + 4);
 
     PrivateKey ret = PrivateKey::Aggregate({parentSk, PrivateKey::FromBytes(Bytes(digest, HASH_LEN), true)});
 
-    Util::SecFree(buf);
-    Util::SecFree(digest);
+    util::SecFree(buf, G1Element::SIZE + 4);
+    util::SecFree(digest, HASH_LEN);
     return ret;
 }
 
 G1Element HDKeys::DeriveChildG1Unhardened(const G1Element& pk, uint32_t index) {
-    uint8_t* buf = Util::SecAlloc<uint8_t>(G1Element::SIZE + 4);
-    uint8_t* digest = Util::SecAlloc<uint8_t>(HASH_LEN);
+    uint8_t* buf = util::SecAlloc<uint8_t>(G1Element::SIZE + 4);
+    uint8_t* digest = util::SecAlloc<uint8_t>(HASH_LEN);
     memcpy(buf, pk.Serialize().data(), G1Element::SIZE);
 
     Util::IntToFourBytes(buf + G1Element::SIZE, index);
@@ -155,16 +155,16 @@ G1Element HDKeys::DeriveChildG1Unhardened(const G1Element& pk, uint32_t index) {
     g1_get_ord(ord);
     bn_mod_basic(nonce, nonce, ord);
 
-    Util::SecFree(buf);
-    Util::SecFree(digest);
+    util::SecFree(buf, G1Element::SIZE + 4);
+    util::SecFree(digest, HASH_LEN);
 
     G1Element gen = G1Element::Generator();
     return pk + gen * nonce;
 }
 
 G2Element HDKeys::DeriveChildG2Unhardened(const G2Element& pk, uint32_t index) {
-    uint8_t* buf = Util::SecAlloc<uint8_t>(G2Element::SIZE + 4);
-    uint8_t* digest = Util::SecAlloc<uint8_t>(HASH_LEN);
+    uint8_t* buf = util::SecAlloc<uint8_t>(G2Element::SIZE + 4);
+    uint8_t* digest = util::SecAlloc<uint8_t>(HASH_LEN);
     memcpy(buf, pk.Serialize().data(), G2Element::SIZE);
     Util::IntToFourBytes(buf + G2Element::SIZE, index);
     Util::Hash256(digest, buf, G2Element::SIZE + 4);
@@ -175,8 +175,8 @@ G2Element HDKeys::DeriveChildG2Unhardened(const G2Element& pk, uint32_t index) {
     g1_get_ord(ord);
     bn_mod_basic(nonce, nonce, ord);
 
-    Util::SecFree(buf);
-    Util::SecFree(digest);
+    util::SecFree(buf, G2Element::SIZE + 4);
+    util::SecFree(digest, HASH_LEN);
 
     G2Element gen = G2Element::Generator();
     return pk + gen * nonce;

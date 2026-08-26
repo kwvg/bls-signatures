@@ -26,14 +26,15 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
-#include <array>
 
 namespace bls {
-
 class BLS;
 
 class Bytes {
@@ -76,22 +77,6 @@ class Util {
     static std::string HexStr(const std::vector<uint8_t> &data);
 
     /*
-     * Securely allocates a portion of memory, using libsodium. This prevents
-     * paging to disk, and zeroes out the memory when it's freed.
-     */
-    template<class T>
-    static T* SecAlloc(size_t numTs) {
-        return static_cast<T*>(secureAllocCallback(sizeof(T) * numTs));
-    }
-
-    /*
-     * Frees memory allocated using SecAlloc.
-     */
-    static void SecFree(void* ptr) {
-        secureFreeCallback(ptr);
-    }
-
-    /*
      * Converts one hex character to an int.
      */
     static uint8_t char2int(const char input);
@@ -114,10 +99,6 @@ class Util {
 
     static bool HasOnlyZeros(const Bytes& bytes);
 
- private:
-    friend class BLS;
-    static SecureAllocCallback secureAllocCallback;
-    static SecureFreeCallback secureFreeCallback;
 };
 } // end namespace bls
 #endif  // SRC_BLSUTIL_HPP_

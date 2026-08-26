@@ -5,10 +5,59 @@
 #include "secure.h"
 #include "util.hpp"
 
+#include <new>
+#include <stdexcept>
 #include <utility>
 
 namespace bls {
 namespace util {
+namespace {
+Util::SecureAllocCallback g_pfnSecureAlloc{nullptr};
+Util::SecureFreeCallback g_pfnSecureFree{nullptr};
+} // anonymous namespace
+
+void SetSecureAllocator(Util::SecureAllocCallback pfnAlloc,
+                        Util::SecureFreeCallback pfnFree)
+{
+    if (pfnAlloc == nullptr || pfnFree == nullptr) {
+        throw std::invalid_argument("secure allocator must not be null");
+    }
+    g_pfnSecureAlloc = pfnAlloc;
+    g_pfnSecureFree = pfnFree;
+}
+
+void GetSecureAllocator(Util::SecureAllocCallback* ppfnAlloc,
+                        Util::SecureFreeCallback* ppfnFree)
+{
+    if (ppfnAlloc != nullptr) {
+        *ppfnAlloc = g_pfnSecureAlloc;
+    }
+    if (ppfnFree != nullptr) {
+        *ppfnFree = g_pfnSecureFree;
+    }
+}
+
+void* SecMalloc(size_t nBytes)
+{
+    if (g_pfnSecureAlloc == nullptr) {
+        throw std::runtime_error("secure allocator used before BLS::Init");
+    }
+    void* pAllocation = g_pfnSecureAlloc(nBytes);
+    if (pAllocation == nullptr) {
+        throw std::bad_alloc();
+    }
+    return pAllocation;
+}
+
+void SecFree(void* ptr, size_t nBytes)
+{
+    SecureWipe(ptr, nBytes);
+    if (g_pfnSecureFree == nullptr) {
+        return;
+    }
+    g_pfnSecureFree(ptr);
+}
+
 Bn::Bn()
 {
     bn_null(m_val);
